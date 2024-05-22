@@ -1,5 +1,10 @@
 name: ci
-on: [push, pull_request]
+on: 
+  workflow_dispatch:
+    inputs:
+      tag_date:
+        description: 'tag date'     
+        required: true
 jobs:
   make-build:
     strategy:
