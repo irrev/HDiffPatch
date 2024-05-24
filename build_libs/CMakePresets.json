@@ -138,7 +138,7 @@
             "name": "linux-arm",
             "displayName": "Linux ARM",
             "description": "Build for Linux ARM",
-            "generator": "Ninja",
+            "generator": "Unix Makefiles",
             "binaryDir": "${sourceDir}/out/linux-arm",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Release",
@@ -152,7 +152,7 @@
             "name": "linux-x86",
             "displayName": "Linux x86",
             "description": "Build for Linux x86",
-            "generator": "Ninja",
+            "generator": "Unix Makefiles",
             "binaryDir": "${sourceDir}/out/linux-x86",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Release",
@@ -166,7 +166,7 @@
             "name": "linux-x64",
             "displayName": "Linux x64",
             "description": "Build for Linux x64",
-            "generator": "Ninja",
+            "generator": "Unix Makefiles",
             "binaryDir": "${sourceDir}/out/linux-x64",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Release",
