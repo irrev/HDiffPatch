@@ -63,6 +63,18 @@ jobs:
         echo "build-output-dir=${{ github.workspace }}/build/${{ matrix.preset }}" >> "$GITHUB_OUTPUT"
         echo "cmake-dir=${{ github.workspace }}/build_libs" >> "$GITHUB_OUTPUT"
 
+    - name: Install Ninja (Ubuntu)
+      if: startsWith(matrix.os, 'ubuntu')
+      run: sudo apt-get install ninja-build
+
+    - name: Install Ninja (Windows)
+      if: startsWith(matrix.os, 'windows')
+      run: choco install ninja
+
+    - name: Install Ninja (macOS)
+      if: startsWith(matrix.os, 'macOS')
+      run: brew install ninja
+      
     - name: Configure CMake
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
       # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
