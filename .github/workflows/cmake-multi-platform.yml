@@ -21,12 +21,27 @@ jobs:
         build_type: [Release]
         include:
           - os: windows-latest
-            preset: [windows-x64, windows-x86, android-arm64, android-armeabi, android-x86, android-x86_64]
+            preset: windows-x64
+          - os: windows-latest
+            preset: windows-x86
+          - os: windows-latest
+            preset: android-arm64
+          - os: windows-latest
+            preset: android-armeabi
+          - os: windows-latest
+            preset: android-x86
+          - os: windows-latest
+            preset: android-x86_64
           - os: ubuntu-latest
-            preset: [linux-arm, linux-x86, linux-x64]
+            preset: linux-arm
+          - os: ubuntu-latest
+            preset: linux-x86
+          - os: ubuntu-latest
+            preset: linux-x64
           - os: macos-latest
-            preset: [macos, ios]
-
+            preset: macos
+          - os: macos-latest
+            preset: ios
     steps:
     - uses: actions/checkout@v4
 
