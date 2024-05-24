@@ -142,8 +142,8 @@
             "binaryDir": "${sourceDir}/out/linux-arm",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Release",
-                "CMAKE_C_COMPILER": "clang",
-                "CMAKE_CXX_COMPILER": "clang++",
+                "CMAKE_C_COMPILER": "gcc",
+                "CMAKE_CXX_COMPILER": "g++",
                 "CMAKE_SYSTEM_NAME": "Linux",
                 "CMAKE_SYSTEM_PROCESSOR": "armv7"
             }
@@ -156,8 +156,8 @@
             "binaryDir": "${sourceDir}/out/linux-x86",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Release",
-                "CMAKE_C_COMPILER": "clang",
-                "CMAKE_CXX_COMPILER": "clang++",
+                "CMAKE_C_COMPILER": "gcc",
+                "CMAKE_CXX_COMPILER": "g++",
                 "CMAKE_SYSTEM_NAME": "Linux",
                 "CMAKE_SYSTEM_PROCESSOR": "x86"
             }
@@ -170,8 +170,8 @@
             "binaryDir": "${sourceDir}/out/linux-x64",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Release",
-                "CMAKE_C_COMPILER": "clang",
-                "CMAKE_CXX_COMPILER": "clang++",
+                "CMAKE_C_COMPILER": "gcc",
+                "CMAKE_CXX_COMPILER": "g++",
                 "CMAKE_SYSTEM_NAME": "Linux",
                 "CMAKE_SYSTEM_PROCESSOR": "x86_64"
             }
