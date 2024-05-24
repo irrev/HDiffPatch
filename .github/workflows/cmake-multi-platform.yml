@@ -2,11 +2,12 @@
 # See: https://github.com/actions/starter-workflows/blob/main/ci/cmake-single-platform.yml
 name: CMake on multiple platforms
 
-on:
-  push:
-    branches: [ $default-branch ]
-  pull_request:
-    branches: [ $default-branch ]
+on: 
+  workflow_dispatch:
+    inputs:
+      tag_date:
+        description: 'tag date'     
+        required: true
 
 jobs:
   build:
