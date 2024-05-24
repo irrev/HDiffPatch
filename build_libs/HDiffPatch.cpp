@@ -4,9 +4,9 @@
 #include "HDiffPatch.h"
 
 #if HDIFFPATCH_EXPORT_DIFF
-#include "..\libHDiffPatch\HDiff\diff.h"
+#include "../libHDiffPatch/HDiff/diff.h"
 #endif //HDIFFPATCH_EXPORT_DIFF
-#include "..\libHDiffPatch\HPatch\patch.h"
+#include "../libHDiffPatch/HPatch/patch.h"
 
 namespace HDiffPatch
 {
