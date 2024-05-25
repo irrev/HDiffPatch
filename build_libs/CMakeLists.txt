@@ -30,7 +30,10 @@ file(GLOB_RECURSE libHDiffPatch "../libHDiffPatch/*")
 file(GLOB_RECURSE libParallel "../libParallel/*")
 
 # 搜集源文件
-file(GLOB_RECURSE SOURCES "HDiffPatch.cpp" "HDiffPatch.h")
+file(GLOB_RECURSE SOURCES "HDiffPatch.cpp")
+
+# 添加到库
+include_directories(${PROJECT_SOURCE_DIR})
 
 # 添加到库
 add_library(HDiffPatch SHARED ${libHDiffPatch} ${libParallel} ${SOURCES})
