@@ -25,13 +25,13 @@ jobs:
             preset: windows-x64
           - os: windows-latest
             preset: windows-x86
-          - os: windows-latest
+          - os: ubuntu-latest
             preset: android-arm64
-          - os: windows-latest
+          - os: ubuntu-latest
             preset: android-armeabi
-          - os: windows-latest
+          - os: ubuntu-latest
             preset: android-x86
-          - os: windows-latest
+          - os: ubuntu-latest
             preset: android-x86_64
           - os: ubuntu-latest
             preset: linux-arm
@@ -71,7 +71,7 @@ jobs:
       run: |
         echo "ANDROID_HOME=${{ANDROID_HOME}}"
         # Install Android SDK command line tools
-        echo "y" | ${{ANDROID_HOME}}\tools\bin\sdkmanager --install "platform-tools" "build-tools;30.0.3" "platforms;android-30" "ndk;22.1.7171670"
+        echo "y" | sudo ${{ANDROID_HOME}}\tools\bin\sdkmanager --install "platform-tools" "build-tools;30.0.3" "platforms;android-30" "ndk;22.1.7171670"
         
         # Set NDK path
         echo "NDK_ROOT=${{ANDROID_HOME}}\ndk\22.1.7171670" >> $GITHUB_ENV
