@@ -77,25 +77,27 @@ jobs:
       if: startsWith(matrix.os, 'macOS')
       run: brew install ninja
 
-    - name: Setup MSVC (if Windows)
-      uses: ilammy/msvc-dev-cmd@v1.4.1
+    - name: Setup MSVC (Windows)
       if: startsWith(matrix.preset, 'windows')
+      uses: ilammy/msvc-dev-cmd@v1.4.1
 
     - name: Set up Android SDK and NDK
       if: startsWith(matrix.preset, 'android')
       uses: nttld/setup-ndk@v1
       id: setup-ndk
-      with:
-        ndk-version: r21e
-        add-to-path: false
-      run: ./build.sh
       env:
         ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
         NDK_ROOT: ${{ANDROID_NDK_HOME}}\ndk\22.1.7171670"
+      with:
+        ndk-version: r21e
+        add-to-path: false
+        local-cache: true
       
     - name: Set up Android SDK and NDK
       if: startsWith(matrix.preset, 'android')
       run: |
+        echo "ANDROID_NDK_HOME=${{ANDROID_NDK_HOME}}"
+        echo "NDK_ROOT=${{NDK_ROOT}}"
         echo "NDK_ROOT=${{ANDROID_HOME}}\ndk\22.1.7171670" >> $GITHUB_ENV
 
     - name: Configure CMake
