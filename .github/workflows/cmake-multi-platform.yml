@@ -69,9 +69,10 @@ jobs:
     - name: Set up Android SDK and NDK
       if: startsWith(matrix.preset, 'android')
       run: |
-        echo "ANDROID_HOME=${{ANDROID_HOME}}"
-        # Install Android SDK command line tools
-        echo "y" | sudo ${{ANDROID_HOME}}\tools\bin\sdkmanager --install "platform-tools" "build-tools;30.0.3" "platforms;android-30" "ndk;22.1.7171670"
+        cd ~
+        wget -O NDK -q https://dl.google.com/android/repository/android-ndk-r21b-linux-x86_64.zip
+        sudo apt install unzip -y
+        unzip -q NDK
         
         # Set NDK path
         echo "NDK_ROOT=${{ANDROID_HOME}}\ndk\22.1.7171670" >> $GITHUB_ENV
