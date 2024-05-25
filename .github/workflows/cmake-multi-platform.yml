@@ -88,13 +88,16 @@ jobs:
       with:
         ndk-version: r21e
         add-to-path: false
+        local-cache: true
       
     - name: Set up Android SDK and NDK
       if: startsWith(matrix.preset, 'android')
       run: |
         echo "ndk-path=${{ steps.setup-ndk.outputs.ndk-path }}"
+        cd ${{ steps.setup-ndk.outputs.ndk-path }}
+        ls
         echo "ANDROID_NDK_HOME=${{steps.setup-ndk.outputs.ndk-path}}" >> $GITHUB_ENV
-        echo "NDK_ROOT=${{steps.setup-ndk.outputs.ndk-path}}\ndk\22.1.7171670"" >> $GITHUB_ENV
+        echo "NDK_ROOT=${{steps.setup-ndk.outputs.ndk-path}}\ndk\22.1.7171670" >> $GITHUB_ENV
 
     - name: Configure CMake
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
