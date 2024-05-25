@@ -66,10 +66,9 @@ jobs:
       if: startsWith(matrix.os, 'macOS')
       run: brew install ninja
 
-    - name: Setup MSVC
-      uses: microsoft/setup-msvc@v1.1.0
-      with:
-        toolset: '16.0' # 指定 Visual Studio 版本，例如 16.0 对应 Visual Studio 2019
+    - name: Setup MSVC (if Windows)
+      uses: ilammy/msvc-dev-cmd@v1.4.1
+      if: startsWith(matrix.preset, 'windows')
 
     - name: Set up Android SDK and NDK
       if: startsWith(matrix.preset, 'android')
