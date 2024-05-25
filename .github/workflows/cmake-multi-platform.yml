@@ -2,12 +2,13 @@
 # See: https://github.com/actions/starter-workflows/blob/main/ci/cmake-single-platform.yml
 name: CMake on multiple platforms
 
-on: 
-  workflow_dispatch:
-    inputs:
-      tag_date:
-        description: 'tag date'     
-        required: true
+on: [push, pull_request]
+# on: 
+#   workflow_dispatch:
+#     inputs:
+#       tag_date:
+#         description: 'tag date'     
+#         required: true
 
 jobs:
   build-windows:
