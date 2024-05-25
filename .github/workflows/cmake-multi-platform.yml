@@ -75,7 +75,7 @@ jobs:
         unzip -q NDK
         
         # Set NDK path
-        echo "NDK_ROOT=${{ANDROID_HOME}}\ndk\22.1.7171670" >> $GITHUB_ENV
+        # echo "NDK_ROOT=${{ANDROID_HOME}}\ndk\22.1.7171670" >> $GITHUB_ENV
 
     - name: Configure CMake
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
