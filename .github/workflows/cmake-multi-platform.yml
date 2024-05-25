@@ -24,7 +24,7 @@ jobs:
           - build_target: windows-x64
             os: windows-latest
             preset: windows-x64
-          - - build_target: windows-x86
+          - build_target: windows-x86
             os: windows-latest
             preset: windows-x86
           - build_target: android-arm64
