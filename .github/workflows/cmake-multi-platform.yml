@@ -84,14 +84,14 @@ jobs:
     - name: Set up Android SDK and NDK
       if: startsWith(matrix.preset, 'android')
       uses: nttld/setup-ndk@v1
-        id: setup-ndk
-        with:
-          ndk-version: r21e
-          add-to-path: false
-      - run: ./build.sh
-        env:
-          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
-          NDK_ROOT: ${{ANDROID_NDK_HOME}}\ndk\22.1.7171670"
+      id: setup-ndk
+      with:
+        ndk-version: r21e
+        add-to-path: false
+      run: ./build.sh
+      env:
+        ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+        NDK_ROOT: ${{ANDROID_NDK_HOME}}\ndk\22.1.7171670"
       
     - name: Set up Android SDK and NDK
       if: startsWith(matrix.preset, 'android')
