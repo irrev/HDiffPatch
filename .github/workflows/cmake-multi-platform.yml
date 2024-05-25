@@ -18,30 +18,41 @@ jobs:
       # Set fail-fast to false to ensure that feedback is delivered for all matrix combinations. Consider changing this to true when your workflow is stable.
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        build_target: [windows-x64, windows-x86, android-arm64, android-armeabi, android-x86, android-x86_64, linux-arm, linux-x86, linux-x64, macos, ios]
         build_type: [Release]
         include:
-          - os: windows-latest
+          - build_target: windows-x64
+            os: windows-latest
             preset: windows-x64
-          - os: windows-latest
+          - - build_target: windows-x86
+            os: windows-latest
             preset: windows-x86
-          - os: ubuntu-latest
+          - build_target: android-arm64
+            os: ubuntu-latest
             preset: android-arm64
-          - os: ubuntu-latest
+          - build_target: android-armeabi
+            os: ubuntu-latest
             preset: android-armeabi
-          - os: ubuntu-latest
+          - build_target: android-x86
+            os: ubuntu-latest
             preset: android-x86
-          - os: ubuntu-latest
+          - build_target: android-x86_64
+            os: ubuntu-latest
             preset: android-x86_64
-          - os: ubuntu-latest
+          - build_target: linux-arm
+            os: ubuntu-latest
             preset: linux-arm
-          - os: ubuntu-latest
+          - build_target: linux-x86
+            os: ubuntu-latest
             preset: linux-x86
-          - os: ubuntu-latest
+          - build_target: linux-x64
+            os: ubuntu-latest
             preset: linux-x64
-          - os: macos-latest
+          - build_target: macos
+            os: macos-latest
             preset: macos
-          - os: macos-latest
+          - build_target: ios
+            os: macos-latest
             preset: ios
     steps:
     - uses: actions/checkout@v4
