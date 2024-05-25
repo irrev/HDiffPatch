@@ -94,7 +94,6 @@ jobs:
       if: startsWith(matrix.preset, 'android')
       run: |
         echo "NDK_ROOT=${{steps.setup-ndk.outputs.ndk-path}}" >> $GITHUB_ENV
-        echo "NDK_ROOT=${{NDK_ROOT}}"
 
     - name: Configure CMake
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
