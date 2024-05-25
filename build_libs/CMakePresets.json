@@ -38,7 +38,7 @@
             "name": "android-arm64",
             "displayName": "Android arm64",
             "description": "Build for Android arm64",
-            "generator": "Ninja",
+            "toolchainFile": "$env{NDK_ROOT}/build/cmake/android.toolchain.cmake",
             "binaryDir": "${sourceDir}/out/android-arm64-v8a",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Release",
@@ -50,15 +50,14 @@
                 "CMAKE_ANDROID_ARCH_ABI": "arm64-v8a",
                 "ANDROID_ABI": "arm64-v8a",
                 "CMAKE_ANDROID_STL_TYPE": "gnustl_shared",
-                "CMAKE_ANDROID_API": "29",
-                "CMAKE_TOOLCHAIN_FILE": "$env{NDK_ROOT}/build/cmake/android.toolchain.cmake"
+                "CMAKE_ANDROID_API": "29"
             }
         },
         {
             "name": "android-armeabi",
             "displayName": "Android armeabi",
             "description": "Build for Android armeabi",
-            "generator": "Ninja",
+            "toolchainFile": "$env{NDK_ROOT}/build/cmake/android.toolchain.cmake",
             "binaryDir": "${sourceDir}/out/android-armeabi-v7a",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Release",
@@ -69,15 +68,14 @@
                 "CMAKE_ANDROID_NDK": "$env{NDK_ROOT}",
                 "CMAKE_ANDROID_ARCH_ABI": "armeabi-v7a",
                 "CMAKE_ANDROID_STL_TYPE": "c++_shared",
-                "CMAKE_ANDROID_API": "29",
-                "CMAKE_TOOLCHAIN_FILE": "$env{NDK_ROOT}/build/cmake/android.toolchain.cmake"
+                "CMAKE_ANDROID_API": "29"
             }
         },
         {
             "name": "android-x86",
             "displayName": "Android x86",
             "description": "Build for Android x86",
-            "generator": "Ninja",
+            "toolchainFile": "$env{NDK_ROOT}/build/cmake/android.toolchain.cmake",
             "binaryDir": "${sourceDir}/out/android-x86",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Release",
@@ -88,8 +86,7 @@
                 "CMAKE_ANDROID_NDK": "$env{NDK_ROOT}",
                 "CMAKE_ANDROID_ARCH_ABI": "x86",
                 "CMAKE_ANDROID_STL_TYPE": "c++_shared",
-                "CMAKE_ANDROID_API": "29",
-                "CMAKE_TOOLCHAIN_FILE": "$env{NDK_ROOT}/build/cmake/android.toolchain.cmake"
+                "CMAKE_ANDROID_API": "29"
             }
         },
         {
@@ -98,6 +95,7 @@
             "description": "Build for Android x86_64",
             "generator": "Ninja",
             "binaryDir": "${sourceDir}/out/android-x86_64",
+            "toolchainFile": "$env{NDK_ROOT}/build/cmake/android.toolchain.cmake",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Release",
                 "CMAKE_C_COMPILER": "clang",
@@ -107,8 +105,7 @@
                 "CMAKE_ANDROID_NDK": "$env{NDK_ROOT}",
                 "CMAKE_ANDROID_ARCH_ABI": "x86_64",
                 "CMAKE_ANDROID_STL_TYPE": "c++_shared",
-                "CMAKE_ANDROID_API": "29",
-                "CMAKE_TOOLCHAIN_FILE": "$env{NDK_ROOT}/build/cmake/android.toolchain.cmake"
+                "CMAKE_ANDROID_API": "29"
             }
         },
         {
