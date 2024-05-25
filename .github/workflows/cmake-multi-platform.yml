@@ -68,11 +68,12 @@ jobs:
     - name: Set up Android SDK and NDK
       if: startsWith(matrix.preset, 'android')
       run: |
+        echo "ANDROID_HOME=${{ANDROID_HOME}}"
         # Install Android SDK command line tools
-        echo "y" | ${ANDROID_HOME}/tools/bin/sdkmanager --install "platform-tools" "build-tools;30.0.3" "platforms;android-30" "ndk;22.1.7171670"
+        echo "y" | ${{ANDROID_HOME}}\tools\bin\sdkmanager --install "platform-tools" "build-tools;30.0.3" "platforms;android-30" "ndk;22.1.7171670"
         
         # Set NDK path
-        echo "NDK_ROOT=${ANDROID_HOME}/ndk/22.1.7171670" >> $GITHUB_ENV
+        echo "NDK_ROOT=${{ANDROID_HOME}}\ndk\22.1.7171670" >> $GITHUB_ENV
 
     - name: Configure CMake
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
