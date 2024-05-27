@@ -101,6 +101,7 @@ jobs:
       run: >
         cmake -B ${{ steps.strings.outputs.build-output-dir }}
         -S ${{ steps.strings.outputs.cmake-dir }}
+        -DCMAKE_TOOLCHAIN_FILE=${{ steps.setup-ndk.outputs.ndk-path }}
         --preset=${{ matrix.preset }}
 
     - name: Build
