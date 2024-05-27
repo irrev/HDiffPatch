@@ -123,9 +123,7 @@
                 "CMAKE_CXX_COMPILER": "clang++",
                 "CMAKE_SYSTEM_NAME": "Darwin",
                 "CMAKE_OSX_ARCHITECTURES": "arm64;x86_64",
-                "CMAKE_XCODE_ATTRIBUTE_ONLY_ACTIVE_ARCH": "NO",
-                "CMAKE_XCODE_ATTRIBUTE_ENABLE_BITCODE": "YES",
-                "CMAKE_XCODE_ATTRIBUTE_BITCODE_GENERATION_MODE": "bitcode"
+                "CMAKE_XCODE_ATTRIBUTE_ONLY_ACTIVE_ARCH": "NO"
             }
         },
         {
@@ -139,9 +137,7 @@
                 "CMAKE_CXX_COMPILER": "clang++",
                 "CMAKE_SYSTEM_NAME": "iOS",
                 "CMAKE_OSX_ARCHITECTURES": "arm64;x86_64",
-                "CMAKE_XCODE_ATTRIBUTE_ONLY_ACTIVE_ARCH": "NO",
-                "CMAKE_XCODE_ATTRIBUTE_ENABLE_BITCODE": "YES",
-                "CMAKE_XCODE_ATTRIBUTE_BITCODE_GENERATION_MODE": "bitcode"
+                "CMAKE_XCODE_ATTRIBUTE_ONLY_ACTIVE_ARCH": "NO"
             }
         },
         {
