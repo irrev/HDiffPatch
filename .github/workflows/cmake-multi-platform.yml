@@ -76,18 +76,6 @@ jobs:
         echo "build-output-dir=${{ github.workspace }}/build/${{ matrix.preset }}" >> "$GITHUB_OUTPUT"
         echo "cmake-dir=${{ github.workspace }}/build_libs" >> "$GITHUB_OUTPUT"
 
-    #- name: Install Ninja (Ubuntu)
-    #  if: startsWith(matrix.os, 'ubuntu')
-    #  run: sudo apt-get install ninja-build
-
-    #- name: Install Ninja (Windows)
-    #  if: startsWith(matrix.os, 'windows')
-    #  run: choco install ninja
-
-    #- name: Install Ninja (macOS)
-    #  if: startsWith(matrix.os, 'macOS')
-    #  run: brew install ninja
-
     - name: Install CMake and Ninja
       uses: lukka/get-cmake@latest
       with:
@@ -190,65 +178,54 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: windows-x64
-          path: result/Win/x64
+          path: archive
 
-      - uses: actions/download-artifact@v4
-        with:
-          name: windows-x86
-          path: result/Win/x86
+      - name: Display structure of downloaded files
+        run: ls -R
 
-      - uses: actions/download-artifact@v4
-        with:
-          name: android-arm64
-          path: result/Android/arm64
+      - name: Copy Libs
+        id: strings
+        shell: bash
+        run: |
+          mkdir -p result/windows/x86
+          cp archive/windows-x86/*.lib result/windows/x86/
 
-      - uses: actions/download-artifact@v4
-        with:
-          name: android-armeabi
-          path: result/Android/armeabi
+          mkdir -p result/windows/x64
+          cp archive/windows-x64/*.lib result/windows/x64/
 
-      - uses: actions/download-artifact@v4
-        with:
-          name: android-x86
-          path: result/Android/x86
+          mkdir -p result/android/arm64
+          cp archive/android-arm64/*.a result/android/arm64/
 
-      - uses: actions/download-artifact@v4
-        with:
-          name: android-x86_64
-          path: result/Android/x86_64
+          mkdir -p result/android/armeabi
+          cp archive/android-armeabi/*.a result/android/armeabi/
 
-      - uses: actions/download-artifact@v4
-        with:
-          name: linux-arm
-          path: result/Linux/arm
+          mkdir -p result/android/x86
+          cp archive/android-x86/*.a result/android/x86/
 
-      - uses: actions/download-artifact@v4
-        with:
-          name: linux-x86
-          path: result/Linux/x86
+          mkdir -p result/android/x86_64
+          cp archive/android-x86_64/*.a result/android/x86_64/
 
-      - uses: actions/download-artifact@v4
-        with:
-          name: linux-x64
-          path: result/Linux/x64
+          mkdir -p result/linux/arm
+          cp archive/linux-arm/*.a result/linux/arm/
 
-      - uses: actions/download-artifact@v4
-        with:
-          name: macos
-          path: result/Mac
+          mkdir -p result/linux/x86
+          cp archive/linux-x86/*.a result/linux/x86/
 
-      - uses: actions/download-artifact@v4
-        with:
-          name: ios
-          path: result/iOS
+          mkdir -p result/linux/x64
+          cp archive/linux-x64/*.a result/linux/x64/
+
+          mkdir -p result/macos
+          cp archive/macos/Release/*.a result/macos/
+
+          mkdir -p result/ios
+          cp archive/ios/Release-iphoneos/*.a result/ios/
 
       - name: Copy Head
         id: strings
         shell: bash
         run: |
           mkdir -p result/include
-          cp ./*.h result/include/
+          cp build_libs/*.h result/include/
 
       - name: Zip Result
         run: |
