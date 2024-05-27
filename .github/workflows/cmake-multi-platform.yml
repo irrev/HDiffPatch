@@ -20,7 +20,7 @@ jobs:
       NDK_VERSION_FULL: r21e
       JDK_VERSION: 11
       SDK_PLATFORM: android-21
-      SDK_BUILD_TOOLS: 34.0.5
+      SDK_BUILD_TOOLS: 33.0.1
       XC_VERSION: ${{ '15.2' }}
       CMAKE_VERSION: '3.29.0'
       VCPKG_ROOT: "${{ github.workspace }}/vcpkg"
