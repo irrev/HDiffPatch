@@ -101,7 +101,8 @@ jobs:
       run: >
         cmake -B ${{ steps.strings.outputs.build-output-dir }}
         -S ${{ steps.strings.outputs.cmake-dir }}
-        -DCMAKE_TOOLCHAIN_FILE=${{ steps.setup-ndk.outputs.ndk-path }}
+        -DCMAKE_ANDROID_NDK=${{ steps.setup-ndk.outputs.ndk-path }}
+        -DCMAKE_TOOLCHAIN_FILE=${{ steps.setup-ndk.outputs.ndk-path }}/build/cmake/android.toolchain.cmake
         --preset=${{ matrix.preset }}
 
     - name: Build
