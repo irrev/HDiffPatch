@@ -184,7 +184,6 @@ jobs:
         run: ls -R
 
       - name: Copy Libs
-        id: strings
         shell: bash
         run: |
           mkdir -p result/windows/x86
@@ -221,7 +220,6 @@ jobs:
           cp archive/ios/Release-iphoneos/*.a result/ios/
 
       - name: Copy Head
-        id: strings
         shell: bash
         run: |
           mkdir -p result/include
