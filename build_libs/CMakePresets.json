@@ -117,7 +117,7 @@
             "displayName": "macOS",
             "description": "Build for macOS",
             "generator": "Xcode",
-            "binaryDir": "${sourceDir}/out/build/macos",
+            "binaryDir": "${sourceDir}/out/macos",
             "cacheVariables": {
                 "CMAKE_C_COMPILER": "clang",
                 "CMAKE_CXX_COMPILER": "clang++",

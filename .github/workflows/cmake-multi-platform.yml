@@ -79,11 +79,11 @@ jobs:
     #- name: Install Ninja (Ubuntu)
     #  if: startsWith(matrix.os, 'ubuntu')
     #  run: sudo apt-get install ninja-build
-#
+
     #- name: Install Ninja (Windows)
     #  if: startsWith(matrix.os, 'windows')
     #  run: choco install ninja
-#
+
     #- name: Install Ninja (macOS)
     #  if: startsWith(matrix.os, 'macOS')
     #  run: brew install ninja
@@ -174,4 +174,102 @@ jobs:
     - name: Build
       # Build your program with the given configuration. Note that --config is needed because the default Windows generator is a multi-config generator (Visual Studio generator).
       run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.build_type }}
-      
+
+
+    - name: Archive Build Result
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.preset }}
+        path: ${{ steps.strings.outputs.build-output-dir }}
+    
+  release:
+    runs-on: ubuntu-latest
+    - uses: actions/checkout@v4
+
+    - uses: actions/download-artifact@v4
+      with:
+        name: windows-x64
+        path: result/Win/x64
+
+    - uses: actions/download-artifact@v4
+      with:
+        name: windows-x86
+        path: result/Win/x86
+
+    - uses: actions/download-artifact@v4
+      with:
+        name: android-arm64
+        path: result/Android/arm64
+
+    - uses: actions/download-artifact@v4
+      with:
+        name: android-armeabi
+        path: result/Android/armeabi
+
+    - uses: actions/download-artifact@v4
+      with:
+        name: android-x86
+        path: result/Android/x86
+
+    - uses: actions/download-artifact@v4
+      with:
+        name: android-x86_64
+        path: result/Android/x86_64
+
+    - uses: actions/download-artifact@v4
+      with:
+        name: linux-arm
+        path: result/Linux/arm
+
+    - uses: actions/download-artifact@v4
+      with:
+        name: linux-x86
+        path: result/Linux/x86
+
+    - uses: actions/download-artifact@v4
+      with:
+        name: linux-x64
+        path: result/Linux/x64
+
+    - uses: actions/download-artifact@v4
+      with:
+        name: macos
+        path: result/Mac
+
+    - uses: actions/download-artifact@v4
+      with:
+        name: ios
+        path: result/iOS
+
+    - name: Copy Head
+      id: strings
+      shell: bash
+      run: |
+        mkdir -p result/include
+        cp ./*.h result/include/
+
+    - name: Zip Result
+        run: |
+          zip -r HDiffPatch.zip result/
+
+    - name: Create a new release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: Release ${{ github.ref }}
+        draft: false
+        prerelease: false
+
+    - name: Upload release assets
+      id: upload_release_assets
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./HDiffPatch.zip
+        asset_name: HDiffPatch.zip
+        asset_content_type: application/zip
