@@ -36,7 +36,7 @@ file(GLOB_RECURSE SOURCES "HDiffPatch.cpp")
 include_directories(${PROJECT_SOURCE_DIR})
 
 # 添加到库
-add_library(HDiffPatch SHARED ${libHDiffPatch} ${libParallel} ${SOURCES})
+add_library(HDiffPatch STATIC ${libHDiffPatch} ${libParallel} ${SOURCES})
 
 # 设置库的输出目录
 set_target_properties(HDiffPatch PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)

@@ -136,7 +136,7 @@
                 "CMAKE_C_COMPILER": "clang",
                 "CMAKE_CXX_COMPILER": "clang++",
                 "CMAKE_SYSTEM_NAME": "iOS",
-                "CMAKE_OSX_ARCHITECTURES": "arm64;x86_64",
+                "CMAKE_OSX_ARCHITECTURES": "arm64",
                 "CMAKE_XCODE_ATTRIBUTE_ONLY_ACTIVE_ARCH": "NO"
             }
         },
