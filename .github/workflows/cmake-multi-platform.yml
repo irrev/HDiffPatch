@@ -95,9 +95,36 @@ jobs:
       run: |
         echo "NDK_ROOT=${{steps.setup-ndk.outputs.ndk-path}}" >> $GITHUB_ENV
 
-    - name: Configure CMake
-      # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
-      # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
+    - name: Configure CMake (Windows)
+      if: startsWith(matrix.preset, 'windows')
+      run: >
+        cmake -B ${{ steps.strings.outputs.build-output-dir }}
+        -S ${{ steps.strings.outputs.cmake-dir }}
+        --preset=${{ matrix.preset }}
+
+    - name: Configure CMake (Linux)
+      if: startsWith(matrix.preset, 'linux')
+      run: >
+        cmake -B ${{ steps.strings.outputs.build-output-dir }}
+        -S ${{ steps.strings.outputs.cmake-dir }}
+        --preset=${{ matrix.preset }}
+
+    - name: Configure CMake (Mac)
+      if: startsWith(matrix.preset, 'mac') ||
+      run: >
+        cmake -B ${{ steps.strings.outputs.build-output-dir }}
+        -S ${{ steps.strings.outputs.cmake-dir }}
+        --preset=${{ matrix.preset }}
+
+    - name: Configure CMake (iOS)
+      if: startsWith(matrix.preset, 'ios') ||
+      run: >
+        cmake -B ${{ steps.strings.outputs.build-output-dir }}
+        -S ${{ steps.strings.outputs.cmake-dir }}
+        --preset=${{ matrix.preset }}
+
+    - name: Configure CMake (Android)
+      if: startsWith(matrix.preset, 'android')
       run: >
         cmake -B ${{ steps.strings.outputs.build-output-dir }}
         -S ${{ steps.strings.outputs.cmake-dir }}
