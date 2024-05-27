@@ -186,73 +186,73 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-  
+
       - uses: actions/download-artifact@v4
         with:
           name: windows-x64
           path: result/Win/x64
-  
+
       - uses: actions/download-artifact@v4
         with:
           name: windows-x86
           path: result/Win/x86
-  
+
       - uses: actions/download-artifact@v4
         with:
           name: android-arm64
           path: result/Android/arm64
-  
+
       - uses: actions/download-artifact@v4
         with:
           name: android-armeabi
           path: result/Android/armeabi
-  
+
       - uses: actions/download-artifact@v4
         with:
           name: android-x86
           path: result/Android/x86
-  
+
       - uses: actions/download-artifact@v4
         with:
           name: android-x86_64
           path: result/Android/x86_64
-  
+
       - uses: actions/download-artifact@v4
         with:
           name: linux-arm
           path: result/Linux/arm
-  
+
       - uses: actions/download-artifact@v4
         with:
           name: linux-x86
           path: result/Linux/x86
-  
+
       - uses: actions/download-artifact@v4
         with:
           name: linux-x64
           path: result/Linux/x64
-  
+
       - uses: actions/download-artifact@v4
         with:
           name: macos
           path: result/Mac
-  
+
       - uses: actions/download-artifact@v4
         with:
           name: ios
           path: result/iOS
-  
+
       - name: Copy Head
         id: strings
         shell: bash
         run: |
           mkdir -p result/include
           cp ./*.h result/include/
-  
+
       - name: Zip Result
-          run: |
-            zip -r HDiffPatch.zip result/
-  
+        run: |
+          zip -r HDiffPatch.zip result/
+
       - name: Create a new release
         id: create_release
         uses: actions/create-release@v1
@@ -263,7 +263,7 @@ jobs:
           release_name: Release ${{ github.ref }}
           draft: false
           prerelease: false
-  
+
       - name: Upload release assets
         id: upload_release_assets
         uses: actions/upload-release-asset@v1
