@@ -54,6 +54,7 @@ elseif(APPLE)
     target_compile_definitions(HDiffPatch PRIVATE HDIFFPATCH_PLATFORM_MACOS)
 endif()
 
+message("print NDK_ROOT=$ENV{NDK_ROOT}")
 
 # 添加导出宏
 target_compile_definitions(HDiffPatch PRIVATE HDIFFPATCH_EXPORTS)
