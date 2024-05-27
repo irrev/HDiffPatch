@@ -46,6 +46,8 @@ if(WIN32)
     target_compile_definitions(HDiffPatch PRIVATE HDIFFPATCH_PLATFORM_WINDOWS)
 elseif(ANDROID)
     target_compile_definitions(HDiffPatch PRIVATE HDIFFPATCH_PLATFORM_ANDROID)
+    #for resolve can't find __android_log_print
+    target_link_libraries(HDiffPatch log)
 elseif(IOS)
     target_compile_definitions(HDiffPatch PRIVATE HDIFFPATCH_PLATFORM_IOS)
 elseif(UNIX AND NOT APPLE)
