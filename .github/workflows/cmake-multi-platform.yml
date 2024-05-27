@@ -110,14 +110,14 @@ jobs:
         --preset=${{ matrix.preset }}
 
     - name: Configure CMake (Mac)
-      if: startsWith(matrix.preset, 'mac') ||
+      if: startsWith(matrix.preset, 'mac')
       run: >
         cmake -B ${{ steps.strings.outputs.build-output-dir }}
         -S ${{ steps.strings.outputs.cmake-dir }}
         --preset=${{ matrix.preset }}
 
     - name: Configure CMake (iOS)
-      if: startsWith(matrix.preset, 'ios') ||
+      if: startsWith(matrix.preset, 'ios')
       run: >
         cmake -B ${{ steps.strings.outputs.build-output-dir }}
         -S ${{ steps.strings.outputs.cmake-dir }}
