@@ -39,16 +39,16 @@ jobs:
             os: windows-latest
             preset: windows-x86
           - build_target: android-arm64
-            os: windows-latest
+            os: ubuntu-latest
             preset: android-arm64
           - build_target: android-armeabi
-            os: windows-latest
+            os: ubuntu-latest
             preset: android-armeabi
           - build_target: android-x86
-            os: windows-latest
+            os: ubuntu-latest
             preset: android-x86
           - build_target: android-x86_64
-            os: windows-latest
+            os: ubuntu-latest
             preset: android-x86_64
           - build_target: linux-arm
             os: ubuntu-latest
@@ -124,6 +124,7 @@ jobs:
       uses: malinskiy/action-android/install-sdk@release/0.1.2
 
     - name: Install Android Tools
+      if: startsWith(matrix.preset, 'android')
       run: |
         sdkmanager --licenses && sdkmanager --verbose "platforms;${SDK_PLATFORM}" "build-tools;${SDK_BUILD_TOOLS}" tools platform-tools
 
