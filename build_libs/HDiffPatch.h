@@ -18,34 +18,34 @@
 #endif
 
 #ifdef HDIFFPATCH_PLATFORM_WINDOWS
-#define DLLIMPORT EXTERN __declspec(dllimport)
-#define DLLEXPORT EXTERN __declspec(dllexport)
+#define HDIFFPATCH_IMPORT EXTERN __declspec(dllimport)
+#define HDIFFPATCH_EXPORT EXTERN __declspec(dllexport)
 #endif
 
 #ifdef HDIFFPATCH_PLATFORM_ANDROID
-#define DLLEXPORT EXTERN __attribute__((visibility("default")))
-#define DLLIMPORT EXTERN __attribute__((visibility("default")))
+#define HDIFFPATCH_EXPORT EXTERN __attribute__((visibility("default")))
+#define HDIFFPATCH_IMPORT EXTERN __attribute__((visibility("default")))
 #endif
 
 #ifdef HDIFFPATCH_PLATFORM_MACOS
-#define DLLEXPORT EXTERN __attribute__((visibility("default")))
-#define DLLIMPORT EXTERN __attribute__((visibility("default")))
+#define HDIFFPATCH_EXPORT EXTERN __attribute__((visibility("default")))
+#define HDIFFPATCH_IMPORT EXTERN __attribute__((visibility("default")))
 #endif
 
 #ifdef HDIFFPATCH_PLATFORM_IOS
-#define DLLEXPORT EXTERN __attribute__((visibility("default")))
-#define DLLIMPORT
+#define HDIFFPATCH_EXPORT EXTERN __attribute__((visibility("default")))
+#define HDIFFPATCH_IMPORT
 #endif
 
 #ifdef HDIFFPATCH_PLATFORM_LINUX
-#define DLLEXPORT EXTERN __attribute__((visibility("default")))
-#define DLLIMPORT EXTERN __attribute__((visibility("default")))
+#define HDIFFPATCH_EXPORT EXTERN __attribute__((visibility("default")))
+#define HDIFFPATCH_IMPORT EXTERN __attribute__((visibility("default")))
 #endif
 
 #if defined(HDIFFPATCH_EXPORTS)
-#define HDIFFPATCH_API DLLEXPORT
+#define HDIFFPATCH_API HDIFFPATCH_EXPORT
 #else
-#define HDIFFPATCH_API DLLIMPORT
+#define HDIFFPATCH_API HDIFFPATCH_IMPORT
 #endif
 
 //#if defined(HDIFFPATCH_PLATFORM_WINDOWS)||defined(HDIFFPATCH_PLATFORM_LINUX)||defined(HDIFFPATCH_PLATFORM_MACOS)
