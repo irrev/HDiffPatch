@@ -250,11 +250,13 @@ jobs:
 
       - name: Delete the current release
         uses: liudonghua123/delete-release-action@v1
+        continue-on-error: true # 添加这一行
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           release_name: ${{ env.RELEASE_TAG }}
           suppress_errors: true
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create a new release
         id: create_release
