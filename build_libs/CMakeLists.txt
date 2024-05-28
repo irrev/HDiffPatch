@@ -35,7 +35,10 @@ file(GLOB_RECURSE SOURCES "HDiffPatch.cpp")
 # 添加到库
 include_directories(${PROJECT_SOURCE_DIR})
 
-# 添加到库
+# 构建静态库
+add_library(HDiffPatch STATIC ${libHDiffPatch} ${libParallel} ${SOURCES})
+
+# 构建动态库
 add_library(HDiffPatch STATIC ${libHDiffPatch} ${libParallel} ${SOURCES})
 
 # 设置库的输出目录

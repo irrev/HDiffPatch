@@ -190,36 +190,47 @@ jobs:
         run: |
           mkdir -p result/windows/x86
           cp archive/windows-x86/*.lib result/windows/x86/
+          cp archive/windows-x86/*.dll result/windows/x86/
 
           mkdir -p result/windows/x64
           cp archive/windows-x64/*.lib result/windows/x64/
+          cp archive/windows-x64/*.dll result/windows/x64/
 
           mkdir -p result/android/arm64
           cp archive/android-arm64/*.a result/android/arm64/
+          cp archive/android-arm64/*.so result/android/arm64/
 
           mkdir -p result/android/armeabi
           cp archive/android-armeabi/*.a result/android/armeabi/
+          cp archive/android-armeabi/*.so result/android/armeabi/
 
           mkdir -p result/android/x86
           cp archive/android-x86/*.a result/android/x86/
+          cp archive/android-x86/*.so result/android/x86/
 
           mkdir -p result/android/x86_64
           cp archive/android-x86_64/*.a result/android/x86_64/
+          cp archive/android-x86_64/*.so result/android/x86_64/
 
           mkdir -p result/linux/arm
           cp archive/linux-arm/*.a result/linux/arm/
+          cp archive/linux-arm/*.so result/linux/arm/
 
           mkdir -p result/linux/x86
           cp archive/linux-x86/*.a result/linux/x86/
+          cp archive/linux-x86/*.so result/linux/x86/
 
           mkdir -p result/linux/x64
           cp archive/linux-x64/*.a result/linux/x64/
+          cp archive/linux-x64/*.so result/linux/x64/
 
           mkdir -p result/macos
           cp archive/macos/Release/*.a result/macos/
+          cp archive/macos/Release/*.dylib result/macos/
 
           mkdir -p result/ios
           cp archive/ios/Release-iphoneos/*.a result/ios/
+          cp archive/ios/Release-iphoneos/*.dylib result/ios/
 
       - name: Copy Head
         shell: bash
