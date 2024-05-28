@@ -231,10 +231,16 @@ jobs:
         run: |
           zip -r HDiffPatch.zip result/
 
+      #- name: Delete the current release
+      #  run: |
+      #    curl -X DELETE -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" "https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ env.RELEASE_TAG }}"
+      #  continue-on-error: true # 在此步骤失败时继续执行工作流程
+
       - name: Delete the current release
-        run: |
-          curl -X DELETE -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" "https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ env.RELEASE_TAG }}"
-        continue-on-error: true # 在此步骤失败时继续执行工作流程
+        uses: liudonghua123/delete-release-action@v1
+        with:
+          release_name: ${{ env.RELEASE_TAG }}
+          suppress_errors: false
 
       - name: Create a new release
         id: create_release
