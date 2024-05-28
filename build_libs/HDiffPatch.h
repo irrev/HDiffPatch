@@ -48,11 +48,13 @@
 #define HDIFFPATCH_API DLLIMPORT
 #endif
 
-#if defined(HDIFFPATCH_PLATFORM_WINDOWS)||defined(HDIFFPATCH_PLATFORM_LINUX)
-#define HDIFFPATCH_EXPORT_DIFF 1
-#else
-#define HDIFFPATCH_EXPORT_DIFF 0
-#endif
+//#if defined(HDIFFPATCH_PLATFORM_WINDOWS)||defined(HDIFFPATCH_PLATFORM_LINUX)
+//#define HDIFFPATCH_ENABLE_DIFF 1
+//#else
+//#define HDIFFPATCH_ENABLE_DIFF 0
+//#endif
+
+#define HDIFFPATCH_ENABLE_DIFF 1
 
 #include <vector>
 
@@ -60,7 +62,7 @@ namespace HDiffPatch
 {
 	static const int _kMinSingleMatchScore_default = 6;
 
-#if HDIFFPATCH_EXPORT_DIFF
+#if HDIFFPATCH_ENABLE_DIFF
 	//create a diff data between oldData and newData
 	//  out_diff is uncompressed, you can use create_compressed_diff()
 	//       or create_single_compressed_diff() create compressed diff data
@@ -77,7 +79,7 @@ namespace HDiffPatch
 	HDIFFPATCH_API bool CheckDiff(const unsigned char* newData, const unsigned char* newData_end,
 		const unsigned char* oldData, const unsigned char* oldData_end,
 		const unsigned char* diff, const unsigned char* diff_end);
-#endif //HDIFFPATCH_EXPORT_DIFF
+#endif //HDIFFPATCH_ENABLE_DIFF
 
 	//generate newData by patch(oldData + serializedDiff)
 	//  serializedDiff create by create_diff()

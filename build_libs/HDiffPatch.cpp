@@ -3,14 +3,14 @@
 
 #include "HDiffPatch.h"
 
-#if HDIFFPATCH_EXPORT_DIFF
+#if HDIFFPATCH_ENABLE_DIFF
 #include "../libHDiffPatch/HDiff/diff.h"
-#endif //HDIFFPATCH_EXPORT_DIFF
+#endif //HDIFFPATCH_ENABLE_DIFF
 #include "../libHDiffPatch/HPatch/patch.h"
 
 namespace HDiffPatch
 {
-#if HDIFFPATCH_EXPORT_DIFF
+#if HDIFFPATCH_ENABLE_DIFF
 	void CreateDiff(const unsigned char* newData, const unsigned char* newData_end,
 		const unsigned char* oldData, const unsigned char* oldData_end,
 		std::vector<unsigned char>& out_diff,
@@ -25,7 +25,7 @@ namespace HDiffPatch
 	{
 		return check_diff(newData, newData_end, oldData, oldData_end, diff, diff_end);
 	}
-#endif //HDIFFPATCH_EXPORT_DIFF
+#endif //HDIFFPATCH_ENABLE_DIFF
 
 	bool Patch(unsigned char* out_newData, unsigned char* out_newData_end,
 		const unsigned char* oldData, const unsigned char* oldData_end,
