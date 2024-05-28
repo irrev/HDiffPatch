@@ -193,45 +193,55 @@ jobs:
           mkdir -p result/shared/windows/x86
           cp archive/windows-x86/HDiffPatchShared.dll result/shared/windows/x86/HDiffPatch.dll
 
-          mkdir -p result/windows/x64
-          cp archive/windows-x64/HDiffPatchStatic.lib result/windows/x64/HDiffPatch.lib
-          cp archive/windows-x64/HDiffPatchShared.dll result/windows/x64/HDiffPatch.dll
+          mkdir -p result/lib/windows/x64
+          cp archive/windows-x64/HDiffPatchStatic.lib result/lib/windows/x64/HDiffPatch.lib
+          mkdir -p result/shared/windows/x64
+          cp archive/windows-x64/HDiffPatchShared.dll result/shared/windows/x64/HDiffPatch.dll
 
-          mkdir -p result/android/arm64
-          cp archive/android-arm64/libHDiffPatchStatic.a result/android/arm64/HDiffPatch.a
-          cp archive/android-arm64/libHDiffPatchShared.so result/android/arm64/HDiffPatch.so
+          mkdir -p result/lib/android/arm64
+          cp archive/android-arm64/libHDiffPatchStatic.a result/lib/android/arm64/HDiffPatch.a
+          mkdir -p result/shared/android/arm64
+          cp archive/android-arm64/libHDiffPatchShared.so result/shared/android/arm64/HDiffPatch.so
 
-          mkdir -p result/android/armeabi
-          cp archive/android-armeabi/libHDiffPatchStatic.a result/android/armeabi/HDiffPatch.a
-          cp archive/android-armeabi/libHDiffPatchShared.so result/android/armeabi/HDiffPatch.so
+          mkdir -p result/lib/android/armeabi
+          cp archive/android-armeabi/libHDiffPatchStatic.a result/lib/android/armeabi/HDiffPatch.a
+          mkdir -p result/shared/android/armeabi
+          cp archive/android-armeabi/libHDiffPatchShared.so result/shared/android/armeabi/HDiffPatch.so
 
-          mkdir -p result/android/x86
-          cp archive/android-x86/libHDiffPatchStatic.a result/android/x86/HDiffPatch.a
-          cp archive/android-x86/libHDiffPatchShared.so result/android/x86/HDiffPatch.so
+          mkdir -p result/lib/android/x86
+          cp archive/android-x86/libHDiffPatchStatic.a result/lib/android/x86/HDiffPatch.a
+          mkdir -p result/shared/android/x86
+          cp archive/android-x86/libHDiffPatchShared.so result/shared/android/x86/HDiffPatch.so
 
-          mkdir -p result/android/x86_64
-          cp archive/android-x86_64/libHDiffPatchStatic.a result/android/x86_64/HDiffPatch.a
-          cp archive/android-x86_64/libHDiffPatchShared.so result/android/x86_64/HDiffPatch.so
+          mkdir -p result/lib/android/x86_64
+          cp archive/android-x86_64/libHDiffPatchStatic.a result/lib/android/x86_64/HDiffPatch.a
+          mkdir -p result/shared/android/x86_64
+          cp archive/android-x86_64/libHDiffPatchShared.so result/shared/android/x86_64/HDiffPatch.so
 
-          mkdir -p result/linux/arm
-          cp archive/linux-arm/libHDiffPatchStatic.a result/linux/arm/HDiffPatch.a
-          cp archive/linux-arm/libHDiffPatchShared.so result/linux/arm/HDiffPatch.so
+          mkdir -p result/lib/linux/arm
+          cp archive/linux-arm/libHDiffPatchStatic.a result/lib/linux/arm/HDiffPatch.a
+          mkdir -p result/shared/linux/arm
+          cp archive/linux-arm/libHDiffPatchShared.so result/shared/linux/arm/HDiffPatch.so
 
-          mkdir -p result/linux/x86
-          cp archive/linux-x86/libHDiffPatchStatic.a result/linux/x86/HDiffPatch.a
-          cp archive/linux-x86/libHDiffPatchShared.so result/linux/x86/HDiffPatch.so
+          mkdir -p result/lib/linux/x86
+          cp archive/linux-x86/libHDiffPatchStatic.a result/lib/linux/x86/HDiffPatch.a
+          mkdir -p result/shared/linux/x86
+          cp archive/linux-x86/libHDiffPatchShared.so result/shared/linux/x86/HDiffPatch.so
 
-          mkdir -p result/linux/x64
-          cp archive/linux-x64/libHDiffPatchStatic.a result/linux/x64/HDiffPatch.a
-          cp archive/linux-x64/libHDiffPatchShared.so result/linux/x64/HDiffPatch.so
+          mkdir -p result/lib/linux/x64
+          cp archive/linux-x64/libHDiffPatchStatic.a result/lib/linux/x64/HDiffPatch.a
+          mkdir -p result/shared/linux/x64
+          cp archive/linux-x64/libHDiffPatchShared.so result/shared/linux/x64/HDiffPatch.so
 
-          mkdir -p result/macos
-          cp archive/macos/Release/libHDiffPatchStatic.a result/macos/HDiffPatch.a
-          cp archive/macos/Release/libHDiffPatchShared.dylib result/macos/HDiffPatch.dylib
+          mkdir -p result/lib/macos
+          cp archive/macos/Release/libHDiffPatchStatic.a result/lib/macos/HDiffPatch.a
+          mkdir -p result/shared/macos
+          cp archive/macos/Release/libHDiffPatchShared.dylib result/shared/macos/HDiffPatch.dylib
 
-          mkdir -p result/ios
-          cp archive/ios/Release-iphoneos/libHDiffPatchStatic.a result/ios/HDiffPatch.a
-          cp archive/ios/Release/libHDiffPatchShared.dylib result/ios/HDiffPatch.dylib
+          mkdir -p result/lib/ios
+          cp archive/ios/Release-iphoneos/libHDiffPatchStatic.a result/lib/ios/HDiffPatch.a
+          mkdir -p result/shared/ios
+          cp archive/ios/Release/libHDiffPatchShared.dylib result/shared/ios/HDiffPatch.dylib
 
       - name: Copy Head
         shell: bash
