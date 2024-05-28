@@ -24,7 +24,6 @@ jobs:
       XC_VERSION: ${{ '15.2' }}
       CMAKE_VERSION: '3.29.0'
       VCPKG_ROOT: "${{ github.workspace }}/vcpkg"
-      RELEASE_TAG: v1.0.0_${{ github.event.inputs.tag_date }}
 
     strategy:
       # Set fail-fast to false to ensure that feedback is delivered for all matrix combinations. Consider changing this to true when your workflow is stable.
@@ -173,6 +172,8 @@ jobs:
 
   release:
     runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: "v1.0.0_${{ github.event.inputs.tag_date }}"
     needs: [build]
     steps:
       - uses: actions/checkout@v4
