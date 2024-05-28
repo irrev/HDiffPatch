@@ -229,14 +229,23 @@ jobs:
         run: |
           zip -r HDiffPatch.zip result/
 
+      - name: Delete the current release
+        id: delete_release
+        uses: actions/delete-release@v1
+        continue-on-error: true # 在此步骤失败时继续执行工作流程
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v1.0.0_${{ github.event.inputs.tag_date }}
+
       - name: Create a new release
         id: create_release
         uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: v1.0.0
-          release_name: Release v1.0.0
+          tag_name: v1.0.0_${{ github.event.inputs.tag_date }}
+          release_name: Release v1.0.0_${{ github.event.inputs.tag_date }}
           draft: false
           prerelease: false
 
