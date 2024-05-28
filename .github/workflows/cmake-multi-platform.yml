@@ -188,9 +188,10 @@ jobs:
       - name: Copy Libs
         shell: bash
         run: |
-          mkdir -p result/windows/x86
-          cp archive/windows-x86/HDiffPatchStatic.lib result/windows/x86/HDiffPatch.lib
-          cp archive/windows-x86/HDiffPatchShared.dll result/windows/x86/HDiffPatch.dll
+          mkdir -p result/lib/windows/x86
+          cp archive/windows-x86/HDiffPatchStatic.lib result/lib/windows/x86/HDiffPatch.lib
+          mkdir -p result/shared/windows/x86
+          cp archive/windows-x86/HDiffPatchShared.dll result/shared/windows/x86/HDiffPatch.dll
 
           mkdir -p result/windows/x64
           cp archive/windows-x64/HDiffPatchStatic.lib result/windows/x64/HDiffPatch.lib
@@ -249,9 +250,11 @@ jobs:
 
       - name: Delete the current release
         uses: liudonghua123/delete-release-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           release_name: ${{ env.RELEASE_TAG }}
-          suppress_errors: false
+          suppress_errors: true
 
       - name: Create a new release
         id: create_release
