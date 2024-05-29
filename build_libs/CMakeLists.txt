@@ -47,6 +47,7 @@ set_target_properties(HDiffPatchShared PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CMA
 target_compile_definitions(HDiffPatchStatic PRIVATE HDIFFPATCH_STATIC_LIB=1)
 target_compile_definitions(HDiffPatchShared PRIVATE HDIFFPATCH_STATIC_LIB=0)
 
+
 # 为不同平台添加平台宏定义
 if(WIN32)
     target_compile_definitions(HDiffPatchStatic PRIVATE HDIFFPATCH_PLATFORM_WINDOWS)
@@ -65,6 +66,8 @@ elseif(IOS)
 elseif(UNIX AND NOT APPLE)
     target_compile_definitions(HDiffPatchStatic PRIVATE HDIFFPATCH_PLATFORM_LINUX)
     target_compile_definitions(HDiffPatchShared PRIVATE HDIFFPATCH_PLATFORM_LINUX)
+    target_link_libraries(HDiffPatchStatic stdc++)
+    target_link_libraries(HDiffPatchShared stdc++)
 elseif(APPLE)
     target_compile_definitions(HDiffPatchStatic PRIVATE HDIFFPATCH_PLATFORM_MACOS)
     target_compile_definitions(HDiffPatchShared PRIVATE HDIFFPATCH_PLATFORM_MACOS)
