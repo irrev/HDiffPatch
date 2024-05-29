@@ -43,6 +43,10 @@ add_library(HDiffPatchShared SHARED ${libHDiffPatch} ${libParallel} ${SOURCES})
 set_target_properties(HDiffPatchStatic PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 set_target_properties(HDiffPatchShared PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 
+# 库类型宏
+target_compile_definitions(HDiffPatchStatic PRIVATE HDIFFPATCH_STATIC_LIB=1)
+target_compile_definitions(HDiffPatchShared PRIVATE HDIFFPATCH_STATIC_LIB=0)
+
 # 为不同平台添加平台宏定义
 if(WIN32)
     target_compile_definitions(HDiffPatchStatic PRIVATE HDIFFPATCH_PLATFORM_WINDOWS)

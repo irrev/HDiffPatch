@@ -17,36 +17,45 @@
 #define EXTERN
 #endif
 
-#ifdef HDIFFPATCH_PLATFORM_WINDOWS
-#define HDIFFPATCH_IMPORT EXTERN __declspec(dllimport)
-#define HDIFFPATCH_EXPORT EXTERN __declspec(dllexport)
-#endif
 
-#ifdef HDIFFPATCH_PLATFORM_ANDROID
-#define HDIFFPATCH_EXPORT EXTERN __attribute__((visibility("default")))
-#define HDIFFPATCH_IMPORT EXTERN __attribute__((visibility("default")))
-#endif
-
-#ifdef HDIFFPATCH_PLATFORM_MACOS
-#define HDIFFPATCH_EXPORT EXTERN __attribute__((visibility("default")))
-#define HDIFFPATCH_IMPORT EXTERN __attribute__((visibility("default")))
-#endif
-
-#ifdef HDIFFPATCH_PLATFORM_IOS
-#define HDIFFPATCH_EXPORT EXTERN __attribute__((visibility("default")))
-#define HDIFFPATCH_IMPORT
-#endif
-
-#ifdef HDIFFPATCH_PLATFORM_LINUX
-#define HDIFFPATCH_EXPORT EXTERN __attribute__((visibility("default")))
-#define HDIFFPATCH_IMPORT EXTERN __attribute__((visibility("default")))
-#endif
-
-#if defined(HDIFFPATCH_EXPORTS)
-#define HDIFFPATCH_API HDIFFPATCH_EXPORT
+#if HDIFFPATCH_STATIC_LIB
+	#if defined(HDIFFPATCH_EXPORTS)
+		#define HDIFFPATCH_API EXTERN
+	#else
+		#define HDIFFPATCH_API EXTERN
+	#endif
 #else
-#define HDIFFPATCH_API HDIFFPATCH_IMPORT
-#endif
+	#ifdef HDIFFPATCH_PLATFORM_WINDOWS
+	#define HDIFFPATCH_IMPORT __declspec(dllimport)
+	#define HDIFFPATCH_EXPORT __declspec(dllexport)
+	#endif
+
+	#ifdef HDIFFPATCH_PLATFORM_ANDROID
+	#define HDIFFPATCH_EXPORT __attribute__((visibility("default")))
+	#define HDIFFPATCH_IMPORT __attribute__((visibility("default")))
+	#endif
+
+	#ifdef HDIFFPATCH_PLATFORM_MACOS
+	#define HDIFFPATCH_EXPORT __attribute__((visibility("default")))
+	#define HDIFFPATCH_IMPORT __attribute__((visibility("default")))
+	#endif
+
+	#ifdef HDIFFPATCH_PLATFORM_IOS
+	#define HDIFFPATCH_EXPORT __attribute__((visibility("default")))
+	#define HDIFFPATCH_IMPORT
+	#endif
+
+	#ifdef HDIFFPATCH_PLATFORM_LINUX
+	#define HDIFFPATCH_EXPORT __attribute__((visibility("default")))
+	#define HDIFFPATCH_IMPORT __attribute__((visibility("default")))
+	#endif
+
+	#if defined(HDIFFPATCH_EXPORTS)
+		#define HDIFFPATCH_API EXTERN HDIFFPATCH_EXPORT
+	#else
+		#define HDIFFPATCH_API EXTERN HDIFFPATCH_IMPORT
+	#endif
+#endif //HDIFFPATCH_STATIC_LIB
 
 //#if defined(HDIFFPATCH_PLATFORM_WINDOWS)||defined(HDIFFPATCH_PLATFORM_LINUX)||defined(HDIFFPATCH_PLATFORM_MACOS)
 //#define HDIFFPATCH_ENABLE_DIFF 1
