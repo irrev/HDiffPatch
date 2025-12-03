@@ -102,7 +102,116 @@ void hdiff_dirClose(hdiff_TDirHandle dirHandle){
     }
 }
 
-#else  // _WIN32
+#elif defined(_QNX_) 
+
+struct _hdiff_TFindFileData 
+{
+    DIR*                handle;
+    char                dirPath[hpatch_kPathMaxSize];  // 保存目录路径
+    struct dirent*      entry;      // 当前目录项
+    char                fullPath[hpatch_kPathMaxSize];  // 完整路径
+    char                subName_utf8[hpatch_kPathMaxSize];  // 文件名（UTF-8）
+};
+
+hdiff_TDirHandle hdiff_dirOpenForRead(const char* dir_utf8)
+{
+    if(!dir_utf8 || *dir_utf8 == '\0')
+    {
+        return 0;
+    }
+
+    struct _hdiff_TFindFileData* finder = 
+        (struct _hdiff_TFindFileData*)malloc(sizeof(struct _hdiff_TFindFileData));
+    if (finder == nullptr) 
+    {
+        return 0;
+    }
+
+    // 保存目录路径
+    strncpy(finder->dirPath, dir_utf8, hpatch_kPathMaxSize - 1);
+    finder->dirPath[hpatch_kPathMaxSize - 1] = '\0';
+
+    finder->handle = opendir(dir_utf8);
+    if (finder->handle == nullptr) {
+        // 处理特殊情况：目录存在但为空
+        struct stat sb;
+        if (stat(dir_utf8, &sb) == 0 && S_ISDIR(sb.st_mode)) {
+            // 目录存在但为空，返回有效句柄
+            return finder;
+        }
+        free(finder);
+        return 0;
+    }
+    
+    // 读取第一个条目（类似 FindFirstFile）
+    finder->entry = readdir(finder->handle);
+    return finder;
+}
+
+hpatch_BOOL hdiff_dirNext(hdiff_TDirHandle dirHandle,hpatch_TPathType *out_type,const char** out_subName_utf8)
+{
+    assert(dirHandle != 0);
+    struct _hdiff_TFindFileData* finder = (struct _hdiff_TFindFileData*)dirHandle;
+    // 检查目录是否已关闭或遍历完毕
+    if (finder->handle == nullptr) 
+    {
+        *out_subName_utf8 = 0;
+        return hpatch_TRUE; // 退出
+    }
+
+   // 遍历所有目录项
+    while ((finder->entry = readdir(finder->handle)) != nullptr) 
+    {
+        // 跳过 . 和 ..
+        if (strcmp(finder->entry->d_name, ".") == 0 || 
+            strcmp(finder->entry->d_name, "..") == 0) {
+            continue;
+        }
+        
+        // 获取文件名
+        strncpy(finder->subName_utf8, finder->entry->d_name, hpatch_kPathMaxSize - 1);
+        finder->subName_utf8[hpatch_kPathMaxSize - 1] = '\0';
+        *out_subName_utf8 = finder->subName_utf8;
+        
+        // 构造完整路径以用于 stat
+        snprintf(finder->fullPath, hpatch_kPathMaxSize, "%s/%s", 
+                 finder->dirPath,
+                 finder->entry->d_name);
+        
+        // 使用 stat 获取文件类型
+        struct stat sb;
+        if (stat(finder->fullPath, &sb) == 0) 
+        {
+            if (S_ISDIR(sb.st_mode)) {
+                *out_type = kPathType_dir;
+                *out_subName_utf8 = finder->fullPath;
+            } else {
+                *out_type = kPathType_file;
+                *out_subName_utf8 = finder->fullPath;
+            }
+            return hpatch_TRUE;
+        }
+    }
+    
+    // 遍历完毕
+    *out_subName_utf8 = 0;
+    return hpatch_TRUE;
+    
+}
+
+void hdiff_dirClose(hdiff_TDirHandle dirHandle) 
+{
+    struct _hdiff_TFindFileData* finder = (struct _hdiff_TFindFileData*)dirHandle;
+    if (finder != NULL) 
+    {
+        if (finder->handle != NULL) {
+            closedir(finder->handle);
+        }
+        free(finder);
+    }
+}
+
+#else
 
 hdiff_TDirHandle hdiff_dirOpenForRead(const char* dir_utf8){
     hdiff_TDirHandle h=opendir(dir_utf8);
