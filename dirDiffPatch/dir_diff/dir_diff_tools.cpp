@@ -33,6 +33,16 @@
 #   include <windows.h> //FindFirstFileW ...
 #else
 #   include <dirent.h> //opendir ...
+#   ifndef _IS_NO_dirent_d_type
+#       ifdef __QNX__
+#           define _IS_NO_dirent_d_type     1
+#       else
+#           define _IS_NO_dirent_d_type     0
+#       endif
+#   endif
+#   if (_IS_NO_dirent_d_type)
+#       include <sys/stat.h> //stat
+#   endif
 #endif
 
 #ifdef _WIN32
@@ -101,76 +111,88 @@ void hdiff_dirClose(hdiff_TDirHandle dirHandle){
         free(finder);
     }
 }
+// _WIN32
+#else  
+// linux-like
 
-#else  // _WIN32
+    struct _hdiff_TDIRData{
+        DIR*        handle;
+  #if (_IS_NO_dirent_d_type)
+        char        dirName[hpatch_kPathMaxSize];
+  #endif
+    };
 
 hdiff_TDirHandle hdiff_dirOpenForRead(const char* dir_utf8){
-    hdiff_TDirHandle h=opendir(dir_utf8);
-    if (!h) return 0; //error
-    return h;
+    _hdiff_TDIRData* pdir=(_hdiff_TDIRData*)malloc(sizeof(_hdiff_TDIRData));
+    if (pdir==0) return 0; //error
+    pdir->handle=opendir(dir_utf8);
+    if (!pdir->handle) { hdiff_dirClose(pdir); return 0; }//error
+    {
+    #if (_IS_NO_dirent_d_type)
+        const size_t slen=strlen(dir_utf8);
+        if (slen>hpatch_kPathMaxSize-1) { hdiff_dirClose(pdir); return 0; }//error
+        memcpy(pdir->dirName,dir_utf8,slen+1);
+    #endif
+    }
+    return pdir;
 }
 
 hpatch_BOOL hdiff_dirNext(hdiff_TDirHandle dirHandle,hpatch_TPathType *out_type,const char** out_subName_utf8){
     assert(dirHandle!=0);
-    DIR* pdir =(DIR*)dirHandle;
-    struct dirent* pdirent = readdir(pdir);
-    if (pdirent==0){
-        *out_subName_utf8=0; //finish
-        return hpatch_TRUE;
-    }
-
-#ifdef __QNX__
-    static char fullName_utf8[hpatch_kPathMaxSize];
-    static char subName_utf8[hpatch_kPathMaxSize];
-    strncpy(subName_utf8, pdirent->d_name, hpatch_kPathMaxSize - 1);
-    subName_utf8[hpatch_kPathMaxSize - 1] = '\0';
-    *out_subName_utf8 = subName_utf8;
-    while(pdirent = readdir(pdir))
-    {
-        if (strcmp(pdirent->d_name, ".") == 0 || strcmp(pdirent->d_name, "..") == 0)
-        {
-            continue;
-        }
-        snprintf(fullName_utf8, hpatch_kPathMaxSize, "%s/%s", subName_utf8, pdirent->d_name);
-        struct stat sb;
-        if (stat(fullName_utf8, &sb) == 0)
-        {
-            if (S_ISDIR(sb.st_mode))
-            {
-                *out_type = kPathType_dir;
-                *out_subName_utf8 = fullName_utf8;
-            }
-            else
-            {
-                *out_type = kPathType_file;
-                *out_subName_utf8 = fullName_utf8;
-            }
+    _hdiff_TDIRData* pdir=(_hdiff_TDIRData*)dirHandle;
+    while (1){
+        struct dirent* pdirent = readdir(pdir->handle);
+        if (pdirent==0){
+            *out_subName_utf8=0; //finish
             return hpatch_TRUE;
         }
-    }
-    *out_subName_utf8 = 0;
-    return hpatch_TRUE;
-#else
-    if (pdirent->d_type==DT_DIR){
-        *out_type=kPathType_dir;
+        if ((strcmp(pdirent->d_name,".")==0) || (strcmp(pdirent->d_name,"..")==0))
+            continue; //next
+
+    #if (_IS_NO_dirent_d_type)
+        {
+            struct stat s;
+            char fullName_utf8[hpatch_kPathMaxSize];
+            int slen=snprintf(fullName_utf8,hpatch_kPathMaxSize,"%s/%s",pdir->dirName,pdirent->d_name);
+            if ((slen<=0)||(slen>=hpatch_kPathMaxSize)) return hpatch_FALSE;
+            if (stat(fullName_utf8,&s)!=0) return hpatch_FALSE;
+            if ((s.st_mode&S_IFMT)==S_IFDIR)
+                *out_type=kPathType_dir;
+            else if ((s.st_mode&S_IFMT)==S_IFREG)
+                *out_type=kPathType_file;
+          #if (_IS_NEED_BLOCK_DEV)
+            else if ((s.st_mode&S_IFMT)==S_IFBLK)
+                *out_type=kPathType_file;
+          #endif
+            else
+                continue; //next
+        }
+    #else
+        if (pdirent->d_type==DT_DIR)
+            *out_type=kPathType_dir;
+        else if (pdirent->d_type==DT_REG)
+            *out_type=kPathType_file;
+        #if (_IS_NEED_BLOCK_DEV)
+        else if (pdirent->d_type==DT_BLK)
+            *out_type=kPathType_file;
+        #endif
+        else
+            continue; //next
+    #endif
         *out_subName_utf8=pdirent->d_name;
         return hpatch_TRUE;
-    }else if (pdirent->d_type==DT_REG){
-        *out_type=kPathType_file;
-        *out_subName_utf8=pdirent->d_name;
-        return hpatch_TRUE;
-    }else{
-        return hdiff_dirNext(dirHandle,out_type,out_subName_utf8);
     }
-#endif
 }
 
 void hdiff_dirClose(hdiff_TDirHandle dirHandle){
-    if (dirHandle)
-        closedir((DIR*)dirHandle);
+    _hdiff_TDIRData* pdir=(_hdiff_TDIRData*)dirHandle;
+    if (pdir){
+        if (pdir->handle) closedir((DIR*)pdir->handle);
+        free(pdir);
+    }
 }
 
-#endif // if _WIN32 else
+#endif // _WIN32 & linux-like
 #endif // _IS_NEED_DIR_DIFF_PATCH
 
 
