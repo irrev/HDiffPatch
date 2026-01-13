@@ -2,6 +2,12 @@
 
 full changelog at: https://github.com/sisong/HDiffPatch/commits   
 
+## [v4.12.1](https://github.com/sisong/HDiffPatch/tree/v4.12.1) - 2026-01-13
+### Added
+* support dir-diff & dir-patch on QNX OS; by contributor [xiongpan(Oshienai96)](https://github.com/Oshienai96);
+### Fixed
+* fix a bug when run dir-patch & dst-path same as old-path;
+
 ## [v4.12.0](https://github.com/sisong/HDiffPatch/tree/v4.12.0) - 2025-09-19
 ### Added
 * optimize `$hdiffz -m` required memory size when newData similar to oldData;
