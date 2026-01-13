@@ -109,7 +109,8 @@ static IHPatchDirListener defaultPatchDirlistener={{0,_makeNewDir,_copySameFile,
             return hpatch_removeFile(pathName);
     }
     
-    typedef const char* (*IDirPathMove_getDstPathBySrcPath)(void* importMove,const char* srcPath);
+    typedef const char* (*IDirPathMove_getDstPathBySrcPath)(void* importMove,const char* newPath,
+                                                            char* out_pathBuf,char* out_pathBufEnd);
     typedef struct{
         void*           importMove;
         IDirPathMove_getDstPathBySrcPath getDstPathBySrcPath;
@@ -120,6 +121,7 @@ static IHPatchDirListener defaultPatchDirlistener={{0,_makeNewDir,_copySameFile,
     
     static hpatch_BOOL _moveNewToOld(IDirPathMove* dirPathMove) {
         char _tmpPath[hpatch_kPathMaxSize];
+        char _tmpDstPath[hpatch_kPathMaxSize];
         hpatch_BOOL result=hpatch_TRUE;
         IDirPathList*  dstPathList=&dirPathMove->dstPathList;
         IDirPathList*  srcPathList=&dirPathMove->srcPathList;
@@ -145,7 +147,7 @@ static IHPatchDirListener defaultPatchDirlistener={{0,_makeNewDir,_copySameFile,
             const char* srcPath=srcPathList->getPathNameByIndex(srcPathList->import,srcPathIndex,_tmpPath,_tmpPath+sizeof(_tmpPath));
             if (srcPath==0) { result=hpatch_FALSE; continue; }
             if (hpatch_getIsDirName(srcPath)){
-                const char* dstDir=dirPathMove->getDstPathBySrcPath(dirPathMove->importMove,srcPath);
+                const char* dstDir=dirPathMove->getDstPathBySrcPath(dirPathMove->importMove,srcPath,_tmpDstPath,_tmpDstPath+sizeof(_tmpDstPath));
                 if (dstDir==0) { result=hpatch_FALSE; continue; }
                 if (!hpatch_makeNewDir(dstDir)) { _update_ferr(dirPathMove->fileError); result=hpatch_FALSE; continue; }
             }
@@ -157,7 +159,7 @@ static IHPatchDirListener defaultPatchDirlistener={{0,_makeNewDir,_copySameFile,
             if (hpatch_getIsDirName(srcPath)){
                 hpatch_removeDir(srcPath);
             }else{
-                const char* dstPath=dirPathMove->getDstPathBySrcPath(dirPathMove->importMove,srcPath);
+                const char* dstPath=dirPathMove->getDstPathBySrcPath(dirPathMove->importMove,srcPath,_tmpDstPath,_tmpDstPath+sizeof(_tmpDstPath));
                 if (dstPath==0) { result=hpatch_FALSE; continue; }
                 hpatch_removeFile(dstPath);//overwrite
                 if (!hpatch_moveFile(srcPath,dstPath)){//move src to dst
