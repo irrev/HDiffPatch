@@ -1,5 +1,5 @@
 //suffix_string.h
-//后缀字符串的一个实现.
+// An implementation of suffix string.
 //
 /*
  The MIT License (MIT)
@@ -65,10 +65,10 @@ public:
     inline void clear(){ bf.clear(); }
     void buildMatchCache(const TChar* src_begin,const TChar* src_end,size_t threadNum);
 
-    static inline THash getHash(const TChar* datas) { return fast_adler32_start(datas,kFMMinStrSize); }
-    static inline THash rollHash(THash h,const TChar* cur) { return fast_adler32_roll(h,kFMMinStrSize,cur[-kFMMinStrSize],cur[0]); }
+    static hpatch_force_inline THash getHash(const TChar* datas) { return fast_adler32_start(datas,kFMMinStrSize); }
+    static hpatch_force_inline THash rollHash(THash h,const TChar* cur) { return fast_adler32_roll(h,kFMMinStrSize,cur[-kFMMinStrSize],cur[0]); }
 
-    inline bool isHit(THash h) const { return bf.is_hit(h); }
+    hpatch_force_inline bool isHit(THash h) const { return bf.is_hit(h); }
 private:
     TBloomFilter<THash>  bf;
 };
@@ -91,7 +91,7 @@ public:
     inline size_t SASize()const{ return (size_t)(m_src_end-m_src_begin); }
     void clear();
 
-    inline TInt SA(TInt i)const{//return m_SA[i];//排好序的后缀字符串数组.
+    inline TInt SA(TInt i)const{//return m_SA[i];// Sorted suffix string array.
         if (isUseLargeSA())
             return m_SA_large[i];
         else
@@ -102,7 +102,7 @@ private:
     TSuffixString(const TSuffixString &); //empty
     TSuffixString &operator=(const TSuffixString &); //empty
 private:
-    const TChar*        m_src_begin;//原字符串.
+    const TChar*        m_src_begin;// Original string.
     const TChar*        m_src_end;
     std::vector<TInt32> m_SA_limit;
     std::vector<TInt>   m_SA_large;

@@ -38,7 +38,7 @@
 #endif
 
 #if (_IS_RUN_MEM_SAFE_CHECK)
-//__RUN_MEM_SAFE_CHECK用来启动内存访问越界检查,用以防御可能被意外或故意损坏的数据.
+// __RUN_MEM_SAFE_CHECK : enables out-of-bounds memory access checking to protect against data that may be accidentally or intentionally corrupted.
 #   define __RUN_MEM_SAFE_CHECK
 #endif
 
@@ -73,15 +73,15 @@ hpatch_BOOL getBsDiffInfo(hpatch_BsDiffInfo* out_diffinfo,const hpatch_TStreamIn
     if (!diffStream->read(diffStream,0,buf,buf+kBsDiffHeadLen)) // must bz2 compressed size>=8
         return _hpatch_FALSE;
     if (0==memcmp(buf,kBsDiffVersionType,kBsDiffVersionTypeLen)){
-        out_diffinfo->isEsBsd=hpatch_FALSE;
+        out_diffinfo->isEndsleyBsdiff=hpatch_FALSE;
         out_diffinfo->headSize=kBsDiffHeadLen;
     }else if (0==memcmp(buf,kEsBsDiffVersionType,kEsBsDiffVersionTypeLen)){
-        out_diffinfo->isEsBsd=hpatch_TRUE;
+        out_diffinfo->isEndsleyBsdiff=hpatch_TRUE;
         out_diffinfo->headSize=kEsBsDiffHeadLen;
     }else{
         return _hpatch_FALSE;
     }
-    if (out_diffinfo->isEsBsd){
+    if (out_diffinfo->isEndsleyBsdiff){
         buf+=kEsBsDiffVersionTypeLen;
         out_diffinfo->ctrlDataSize=0;
         out_diffinfo->subDataSize =0;
@@ -103,15 +103,17 @@ hpatch_BOOL getBsDiffInfo_mem(hpatch_BsDiffInfo* out_diffinfo,const unsigned cha
     return getBsDiffInfo(out_diffinfo,&diffStream);
 }
 
-hpatch_BOOL getIsBsDiff(const hpatch_TStreamInput* diffData){
+hpatch_BOOL getIsBsDiff(const hpatch_TStreamInput* diffData,hpatch_BOOL* out_isSingleCompressedDiff){
     hpatch_BsDiffInfo diffinfo;
-    return getBsDiffInfo(&diffinfo,diffData);
+    hpatch_BOOL result=getBsDiffInfo(&diffinfo,diffData);
+    if (result&&out_isSingleCompressedDiff) *out_isSingleCompressedDiff=diffinfo.isEndsleyBsdiff;
+    return result;
 }
 
-hpatch_BOOL getIsBsDiff_mem(const unsigned char* diffData,const unsigned char* diffData_end){
+hpatch_BOOL getIsBsDiff_mem(const unsigned char* diffData,const unsigned char* diffData_end,hpatch_BOOL* out_isSingleCompressedDiff){
     hpatch_TStreamInput diffStream;
     mem_as_hStreamInput(&diffStream,diffData,diffData_end);
-    return getIsBsDiff(&diffStream);
+    return getIsBsDiff(&diffStream,out_isSingleCompressedDiff);
 }
 
 static hpatch_BOOL _patch_add_old_with_sub(_TOutStreamCache* outCache,TStreamCacheClip* subClip,
@@ -149,8 +151,6 @@ hpatch_BOOL bspatchByClip(_TOutStreamCache* outCache,const hpatch_TStreamInput* 
             _clip_readUInt64(ctrlClip,&coverLen);
             _clip_readUInt64(ctrlClip,&skipNewLen);
             _clip_readUInt64(ctrlClip,&skipOldLen);
-            if ((skipOldLen>>63)!=0)
-                skipOldLen=-(skipOldLen&((((hpatch_uint64_t)1)<<63)-1));
         }
 #ifdef __RUN_MEM_SAFE_CHECK
         if (coverLen>(hpatch_uint64_t)(newDataSize-newPosBack)) return _hpatch_FALSE;
@@ -159,7 +159,7 @@ hpatch_BOOL bspatchByClip(_TOutStreamCache* outCache,const hpatch_TStreamInput* 
 #endif
         if (!_patch_add_old_with_sub(outCache,subClip,oldData,oldPosBack,coverLen,
                                      temp_cache,cache_size)) return _hpatch_FALSE;
-        oldPosBack+=coverLen+skipOldLen;
+        oldPosBack+=((skipOldLen>>63)==0)?(coverLen+skipOldLen):(coverLen-(skipOldLen&((((hpatch_uint64_t)1)<<63)-1)));
         newPosBack+=coverLen;
         if (skipNewLen){
 #ifdef __RUN_MEM_SAFE_CHECK
@@ -200,8 +200,8 @@ hpatch_BOOL bspatch_with_cache(const hpatch_TStreamOutput* out_newData,
     hpatch_size_t           i;
     hpatch_BOOL  result=hpatch_TRUE;
     hpatch_StreamPos_t  diffPos0;
-    hpatch_TStreamInput  _oldDataCache;
     hpatch_size_t cacheSize;
+    hpatch_BOOL    isReadError=hpatch_FALSE;
     assert(decompressPlugin!=0);
     assert(out_newData!=0);
     assert(out_newData->write!=0);
@@ -216,21 +216,14 @@ hpatch_BOOL bspatch_with_cache(const hpatch_TStreamOutput* out_newData,
     for (i=0;i<sizeof(decompressers)/sizeof(_TDecompressInputStream);++i)
         decompressers[i].decompressHandle=0;
 
+    _patch_cache_all_old(&oldData,_kCacheBsDecCount*hpatch_kStreamCacheSize,&temp_cache,&temp_cache_end,&isReadError);//can cache all old?
+    if (isReadError) return _hpatch_FALSE;
     cacheSize=(temp_cache_end-temp_cache);
-    if (cacheSize>=(oldData->streamSize+_kCacheBsDecCount*hpatch_kStreamCacheSize)){//can cache old?
-        cacheSize=(hpatch_size_t)oldData->streamSize;
-        if (!oldData->read(oldData,0,temp_cache,temp_cache+cacheSize))
-            return _hpatch_FALSE;
-        mem_as_hStreamInput(&_oldDataCache,temp_cache,temp_cache+cacheSize);
-        oldData=&_oldDataCache;
-        temp_cache+=cacheSize;
-        cacheSize=(temp_cache_end-temp_cache);
-    }
-    cacheSize=cacheSize/(diffInfo.isEsBsd?_kCacheBsDecCount-2:_kCacheBsDecCount);
+    cacheSize=cacheSize/(diffInfo.isEndsleyBsdiff?_kCacheBsDecCount-2:_kCacheBsDecCount);
     if (cacheSize<8) return _hpatch_FALSE;
 
     diffPos0=diffInfo.headSize;
-    if (diffInfo.isEsBsd){
+    if (diffInfo.isEndsleyBsdiff){
         if (!getStreamClip(&newDataDiffClip,&decompressers[0],
                         _kUnknowMaxSize,compressedDiff->streamSize-diffPos0,compressedDiff,&diffPos0,
                         decompressPlugin,temp_cache,cacheSize)) _clear_return(_hpatch_FALSE);

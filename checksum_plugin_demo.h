@@ -34,8 +34,10 @@
 //  fadler32ChecksumPlugin
 //  fadler64ChecksumPlugin
 //  fadler128ChecksumPlugin
+//  md4ChecksumPlugin
 //  md5ChecksumPlugin
 //  blake3ChecksumPlugin
+//  sha1ChecksumPlugin
 //  sha256ChecksumPlugin
 //  sha512ChecksumPlugin
 //  xxh3ChecksumPlugin
@@ -60,7 +62,19 @@
 
 #ifdef  _ChecksumPlugin_crc32
 #if (_IsNeedIncludeDefaultChecksumHead)
+# ifndef _IS_USED_LIBDEFLATE_CRC32
+#   define _IS_USED_LIBDEFLATE_CRC32    0
+#endif
+#if (_IS_USED_LIBDEFLATE_CRC32)
+#   include "libdeflate.h" // https://github.com/ebiggers/libdeflate
+# else
 #   include "zlib.h" // http://zlib.net/  https://github.com/madler/zlib
+# endif
+#endif
+#if (_IS_USED_LIBDEFLATE_CRC32)
+#   define _crc32 libdeflate_crc32
+#else
+#   define _crc32 crc32
 #endif
 static const char* _crc32_checksumType(void){
     static const char* type="crc32";
@@ -77,11 +91,14 @@ static void _crc32_close(hpatch_TChecksum* plugin,hpatch_checksumHandle handle){
 }
 static void  _crc32_begin(hpatch_checksumHandle handle){
     hpatch_uint32_t* pv=(hpatch_uint32_t*)handle;
-    *pv=(hpatch_uint32_t)crc32(0,0,0);
+    *pv=(hpatch_uint32_t)_crc32(0,0,0);
 }
 static void _crc32_append(hpatch_checksumHandle handle,
                           const unsigned char* part_data,const unsigned char* part_data_end){
     hpatch_uint32_t* pv=(hpatch_uint32_t*)handle;
+#if (_IS_USED_LIBDEFLATE_CRC32)
+    *pv=_crc32(*pv,part_data,part_data_end-part_data);
+#else
     uLong v=*pv;
     while (part_data!=part_data_end) {
         size_t dataSize=(size_t)(part_data_end-part_data);
@@ -89,10 +106,11 @@ static void _crc32_append(hpatch_checksumHandle handle,
         //assert(len>0);
         if (len>dataSize)
             len=(uInt)dataSize;
-        v=crc32(v,part_data,len);
+        v=_crc32(v,part_data,len);
         part_data+=len;
     }
     *pv=(hpatch_uint32_t)v;
+#endif
 }
 static void _crc32_end(hpatch_checksumHandle handle,
                        unsigned char* checksum,unsigned char* checksum_end){
@@ -482,6 +500,47 @@ static hpatch_TChecksum sha256ChecksumPlugin={ _sha256_checksumType,_sha256_chec
 #endif//_ChecksumPlugin_curl_sha256
 
 
+#ifdef  _ChecksumPlugin_mbedtls_md4
+#if (_IsNeedIncludeDefaultChecksumHead)
+#ifdef __cplusplus
+extern "C" {
+#endif
+#   include "mbedtls/md4.h" // https://github.com/ARMmbed/mbedtls/blob/master/include/mbedtls/md4.h
+#ifdef __cplusplus
+}
+#endif
+#endif
+static const char* _md4_checksumType(void){
+    static const char* type="md4";
+    return type;
+}
+static size_t _md4_checksumByteSize(void){
+    return 16;
+}
+static hpatch_checksumHandle _md4_open(hpatch_TChecksum* plugin){
+    return malloc(sizeof(mbedtls_md4_context));
+}
+static void _md4_close(hpatch_TChecksum* plugin,hpatch_checksumHandle handle){
+    if (handle) free(handle);
+}
+static void _md4_begin(hpatch_checksumHandle handle){
+    mbedtls_md4_init((mbedtls_md4_context*)handle);
+    mbedtls_md4_starts_ret((mbedtls_md4_context*)handle);
+}
+static void _md4_append(hpatch_checksumHandle handle,
+                        const unsigned char* part_data,const unsigned char* part_data_end){
+    mbedtls_md4_update_ret((mbedtls_md4_context*)handle,part_data,part_data_end-part_data);
+}
+static void _md4_end(hpatch_checksumHandle handle,
+                     unsigned char* checksum,unsigned char* checksum_end){
+    assert(16==checksum_end-checksum);
+    mbedtls_md4_finish_ret((mbedtls_md4_context*)handle,checksum);
+}
+static hpatch_TChecksum md4ChecksumPlugin={ _md4_checksumType,_md4_checksumByteSize,_md4_open,
+                                            _md4_close,_md4_begin,_md4_append,_md4_end};
+#endif//_ChecksumPlugin_mbedtls_md4
+
+
 #ifdef  _ChecksumPlugin_mbedtls_md5
 #if (_IsNeedIncludeDefaultChecksumHead)
 #ifdef __cplusplus
@@ -522,6 +581,46 @@ static hpatch_TChecksum md5ChecksumPlugin={ _md5_checksumType,_md5_checksumByteS
                                             _md5_close,_md5_begin,_md5_append,_md5_end};
 #endif//_ChecksumPlugin_mbedtls_md5
 
+
+#ifdef  _ChecksumPlugin_mbedtls_sha1
+#if (_IsNeedIncludeDefaultChecksumHead)
+#ifdef __cplusplus
+extern "C" {
+#endif
+#   include "mbedtls/sha1.h" // https://github.com/ARMmbed/mbedtls/blob/master/include/mbedtls/sha1.h
+#ifdef __cplusplus
+}
+#endif
+#endif
+static const char* _sha1_checksumType(void){
+    static const char* type="sha1";
+    return type;
+}
+static size_t _sha1_checksumByteSize(void){
+    return 20;
+}
+static hpatch_checksumHandle _sha1_open(hpatch_TChecksum* plugin){
+    return malloc(sizeof(mbedtls_sha1_context));
+}
+static void _sha1_close(hpatch_TChecksum* plugin,hpatch_checksumHandle handle){
+    if (handle) free(handle);
+}
+static void  _sha1_begin(hpatch_checksumHandle handle){
+    mbedtls_sha1_init((mbedtls_sha1_context*)handle);
+    mbedtls_sha1_starts_ret((mbedtls_sha1_context*)handle);
+}
+static void _sha1_append(hpatch_checksumHandle handle,
+                           const unsigned char* part_data,const unsigned char* part_data_end){
+    mbedtls_sha1_update_ret((mbedtls_sha1_context*)handle,part_data,part_data_end-part_data);
+}
+static void _sha1_end(hpatch_checksumHandle handle,
+                       unsigned char* checksum,unsigned char* checksum_end){
+    assert(20==checksum_end-checksum);
+    mbedtls_sha1_finish_ret((mbedtls_sha1_context*)handle,checksum);
+}
+static hpatch_TChecksum sha1ChecksumPlugin={ _sha1_checksumType,_sha1_checksumByteSize,_sha1_open,
+                                             _sha1_close,_sha1_begin,_sha1_append,_sha1_end};
+#endif//_ChecksumPlugin_mbedtls_sha1
 
 #ifdef  _ChecksumPlugin_mbedtls_sha256
 #if (_IsNeedIncludeDefaultChecksumHead)

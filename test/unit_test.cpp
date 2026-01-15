@@ -47,12 +47,14 @@ using namespace hdiff_private;
 typedef unsigned char   TByte;
 typedef ptrdiff_t       TInt;
 typedef size_t          TUInt;
-const long kRandTestCount=20000;
+const long kRandTestCount=5000;
+const size_t patch_single_stream_threadNum=1; // 1..5;  1 single-thread, >1 multi-threads
 //#define _AttackPacth_ON
 
 //===== select compress plugin =====
 #define _CompressPlugin_no
 //#define _CompressPlugin_zlib
+//#define _CompressPlugin_ldef
 //#define _CompressPlugin_bz2
 //#define _CompressPlugin_lzma
 //#define _CompressPlugin_lzma2
@@ -69,11 +71,11 @@ const long kRandTestCount=20000;
 #include "../decompress_plugin_demo.h"
 
 #ifndef _CompressPlugin_no
-#include "../dict_compress_plugin_demo.h"   // https://github.com/sisong/hsynz
-#include "../dict_decompress_plugin_demo.h" // https://github.com/sisong/hsynz
+#include "../../hsynz/dict_compress_plugin_demo.h"   // https://github.com/sisong/hsynz
+#include "../../hsynz/dict_decompress_plugin_demo.h" // https://github.com/sisong/hsynz
 #endif
 
-#define _ChecksumPlugin_crc32
+#define _ChecksumPlugin_fadler32
 #include "../checksum_plugin_demo.h"
 
 #ifdef  _CompressPlugin_no
@@ -133,7 +135,11 @@ const long kRandTestCount=20000;
 #endif
 
 static hsync_TDictCompress* _getDictCompressPlugin(){
-#if defined(_CompressPlugin_zlib)
+#if defined(_CompressPlugin_ldef)
+    static TDictCompressPlugin_ldef _ldefDictCompressPlugin=ldefDictCompressPlugin;
+    _ldefDictCompressPlugin.compress_level=6;
+    return &_ldefDictCompressPlugin.base;
+#elif defined(_CompressPlugin_zlib)
     static TDictCompressPlugin_zlib _zlibDictCompressPlugin=zlibDictCompressPlugin;
     _zlibDictCompressPlugin.compress_level=6;
     return &_zlibDictCompressPlugin.base;
@@ -146,8 +152,14 @@ static hsync_TDictCompress* _getDictCompressPlugin(){
 #endif
 }
 
-#define _IS_USES_MY_RAND
-#ifdef _IS_USES_MY_RAND
+#ifndef _IS_USES_MY_RAND
+#  define _IS_USES_MY_RAND 1
+#endif
+#if (_IS_USES_MY_RAND)
+    #ifdef RAND_MAX
+    #   undef RAND_MAX
+    #endif
+    #define RAND_MAX 0x7fff
     class  CMyRand{
     public:
         unsigned int _my_holdrand;
@@ -222,7 +234,7 @@ static bool check_diff_stream(const TByte* newData,const TByte* newData_end,
     return true;
 }
 
-static hpatch_TChecksum* hsynzDefaultChecksum=&crc32ChecksumPlugin;
+static hpatch_TChecksum* hsynzDefaultChecksum=&fadler32ChecksumPlugin;
 
 struct TSyncInfoListener:public ISyncInfoListener{
     inline TSyncInfoListener(){
@@ -236,7 +248,11 @@ struct TSyncInfoListener:public ISyncInfoListener{
         return hsynzDefaultChecksum;
     }
     static hsync_TDictDecompress* _findDecompressPlugin(ISyncInfoListener* listener,const char* compressType,size_t dictSize){
-#if defined(_CompressPlugin_zlib)
+#if defined(_CompressPlugin_ldef)
+        static TDictDecompressPlugin_ldef _ldefDictDecompressPlugin=ldefDictDecompressPlugin;
+        _ldefDictDecompressPlugin.dict_bits=(hpatch_byte)_dictSizeToDictBits(dictSize);
+        return &_ldefDictDecompressPlugin.base;
+#elif defined(_CompressPlugin_zlib)
         static TDictDecompressPlugin_zlib _zlibDictDecompressPlugin=zlibDictDecompressPlugin;
         _zlibDictDecompressPlugin.dict_bits=(hpatch_byte)_dictSizeToDictBits(dictSize);
         return &_zlibDictDecompressPlugin.base;
@@ -260,10 +276,12 @@ struct TReadSyncDataListener:public IReadSyncDataListener{
         readSyncDataEnd=0;
     }
     static hpatch_BOOL _readSyncData(struct IReadSyncDataListener* listener,uint32_t blockIndex,
-                                     hpatch_StreamPos_t posInNewSyncData,hpatch_StreamPos_t posInNeedSyncData,
+                                     hpatch_StreamPos_t posInNewSyncData,uint32_t isReLoadNewHalf,
+                                     hpatch_StreamPos_t posInNeedSyncData,uint32_t isReLoadDiffHalf,
                                      unsigned char* out_syncDataBuf,uint32_t syncDataSize){
         const TReadSyncDataListener* self=(const TReadSyncDataListener*)listener->readSyncDataImport;
         const std::vector<TByte>& src=self->_hzData;
+        posInNewSyncData-=isReLoadNewHalf;
         if (posInNewSyncData+syncDataSize>src.size()) return hpatch_FALSE;
         memcpy(out_syncDataBuf,src.data()+(size_t)posInNewSyncData,syncDataSize);
         return hpatch_TRUE;
@@ -298,7 +316,7 @@ static void _create_hsynz_diff(const TByte* newData,const TByte* newData_end,
     TReadSyncDataListener readSyncDataListener(_hsynzData);
     TNewDataSyncInfo newSyncInfo={0};
     hiStream.streamSize=hiStream.dst.size();
-    ret=TNewDataSyncInfo_open(&newSyncInfo,(const hpatch_TStreamInput*)&hiStream,&syncInfoListener);
+    ret=TNewDataSyncInfo_open(&newSyncInfo,(const hpatch_TStreamInput*)&hiStream,hpatch_FALSE,&syncInfoListener);
     if (ret!=0) throw std::runtime_error("TNewDataSyncInfo_open() error!");
     ret=sync_local_diff(&syncInfoListener,&readSyncDataListener,&oldStream,
                         &newSyncInfo,&diffStream,kSyncDiff_default,0,1);
@@ -321,7 +339,7 @@ static hpatch_BOOL _hsynz_local_patch(unsigned char* out_newData,unsigned char* 
     mem_as_hStreamInput(&hiStream,hsyniData.data(),hsyniData.data()+hsyniData.size());
     TSyncInfoListener syncInfoListener;
     TNewDataSyncInfo newSyncInfo={0};
-    ret=TNewDataSyncInfo_open(&newSyncInfo,&hiStream,&syncInfoListener);
+    ret=TNewDataSyncInfo_open(&newSyncInfo,&hiStream,hpatch_FALSE,&syncInfoListener);
     if (ret!=0){
 #ifdef _AttackPacth_ON
         return hpatch_FALSE;
@@ -355,7 +373,7 @@ static hpatch_BOOL _hsynz_sync_patch(unsigned char* out_newData,unsigned char* o
     TSyncInfoListener syncInfoListener;
     TNewDataSyncInfo newSyncInfo={0};
     TReadSyncDataListener readSyncDataListener(hsynzData);
-    ret=TNewDataSyncInfo_open(&newSyncInfo,&hiStream,&syncInfoListener);
+    ret=TNewDataSyncInfo_open(&newSyncInfo,&hiStream,hpatch_FALSE,&syncInfoListener);
     if (ret!=0){
 #ifdef _AttackPacth_ON
         return hpatch_FALSE;
@@ -414,6 +432,7 @@ enum TDiffType{
     kDiffS,
     kDiffSs,
     kDiffi,
+    kDiffiI, //inplace-patch
     kHSynz,
 };
 static const size_t kDiffTypeCount=kHSynz+1;
@@ -514,9 +533,9 @@ long attackPacth(TByte* out_newData,TByte* out_newData_end,
         case kDiffS: {
             sspatch_listener_t listener={0,_sspatch_onDiffInfo,0};
             patch_single_stream_mem(&listener,out_newData,out_newData_end,oldData,oldData_end,
-                                    diffData,diffData_end,0);
+                                    diffData,diffData_end,0,patch_single_stream_threadNum);
         } break;
-        case kDiffi: {
+        case kDiffi: case kDiffiI: {
             hpi_compressType    compressType;
             check_lite_diff_open(diffData,diffData_end,&compressType);
             check_lite_diff(out_newData,out_newData_end,oldData,oldData_end,
@@ -617,7 +636,7 @@ long test(const TByte* newData,const TByte* newData_end,
         if (out_diffSizes) out_diffSizes[kDiffSs]+=diffData.size();
         struct hpatch_TStreamInput in_diffStream;
         mem_as_hStreamInput(&in_diffStream,diffData.data(),diffData.data()+diffData.size());
-        if (!check_single_compressed_diff(&newStream,&oldStream,&in_diffStream,decompressPlugin)){
+        if (!check_single_compressed_diff(&newStream,&oldStream,&in_diffStream,decompressPlugin,patch_single_stream_threadNum)){
             printf("\n diffs stream error!!! tag:%s\n",tag);
             ++result;
         }else{
@@ -688,6 +707,26 @@ long test(const TByte* newData,const TByte* newData_end,
 #endif
         }
     }
+
+    {//test diffi inplace-patch
+        std::vector<TByte> diffData;
+        hdiffi_TCompress compressPlugini={compressPlugin,compressHpiType};
+        size_t extraSafeSize=(size_t)(_rand()*(1.0/RAND_MAX)*(size_t)(oldData_end-oldData));
+        create_inplaceB_lite_diff(newData,newData_end,oldData,oldData_end,diffData,extraSafeSize,&compressPlugini);
+        if (out_diffSizes) out_diffSizes[kDiffiI]+=diffData.size();
+        if (!check_lite_diff(newData,newData_end,oldData,oldData_end,
+                             diffData.data(),diffData.data()+diffData.size(),decompressPlugin)){
+            printf("\n diffiI error!!! tag:%s\n",tag);
+            ++result;
+        }else{
+            printf(" diffiI:%ld", (long)(diffData.size()));
+#ifdef _AttackPacth_ON
+            long exceptionCount=attackPacth(newData_end-newData,oldData,oldData_end,
+                                            diffData.data(),diffData.data()+diffData.size(),_rand(),kDiffiI);
+            if (exceptionCount>0) return exceptionCount;
+#endif
+        }
+    }
     {//test diff
         std::vector<TByte> diffData;
         create_diff(newData,newData_end,oldData,oldData_end, diffData);
@@ -749,6 +788,9 @@ void setRandData(std::vector<TByte>& data){
 
 
 int main(int argc, const char * argv[]){
+#if (_IS_OUT_DIFF_INFO)
+    _hdiff_is_out_diff_info=0;
+#endif
     clock_t time1=clock();
     long errorCount=0;
     errorCount+=testCompress("","c1");
@@ -834,11 +876,12 @@ int main(int argc, const char * argv[]){
 
     printf("\nchecked:%ld  errorCount:%ld\n",kRandTestCount,errorCount);
     printf("newSize:100%% oldSize:%2.2f%% diffO:%2.2f%% diffZ:%2.2f%%(s:%2.2f%%)"
-           " diffS:%2.2f%%(s:%2.2f%%) diffi:%2.2f%% hsynz:%2.2f%%\n",
+           " diffS:%2.2f%%(s:%2.2f%%) diffi:%2.2f%% diffiI:%2.2f%% hsynz:%2.2f%%\n",
             sumOldSize*100.0/sumNewSize,sumDiffSizes[kDiffO]*100.0/sumNewSize,
             sumDiffSizes[kDiffZ]*100.0/sumNewSize,sumDiffSizes[kDiffZs]*100.0/sumNewSize,
             sumDiffSizes[kDiffS]*100.0/sumNewSize,sumDiffSizes[kDiffSs]*100.0/sumNewSize,
-            sumDiffSizes[kDiffi]*100.0/sumNewSize,sumDiffSizes[kHSynz]*100.0/sumNewSize);
+            sumDiffSizes[kDiffi]*100.0/sumNewSize,sumDiffSizes[kDiffiI]*100.0/sumNewSize,
+            sumDiffSizes[kHSynz]*100.0/sumNewSize);
     clock_t time2=clock();
     printf("\nrun time:%.1f s\n",(time2-time1)*(1.0/CLOCKS_PER_SEC));
 

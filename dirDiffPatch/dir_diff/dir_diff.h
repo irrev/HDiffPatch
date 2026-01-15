@@ -35,6 +35,7 @@ struct THDiffSets{
     hpatch_BOOL isSingleCompressedDiff;
     //diff in mem
     hpatch_BOOL isUseBigCacheMatch;
+    hpatch_BOOL isCheckNotEqual;
     size_t matchScore;
     size_t patchStepMemSize;
     size_t matchBlockSize;
@@ -64,7 +65,7 @@ void dir_diff(IDirDiffListener* listener,const TManifest& oldManifest,
               const THDiffSets& hdiffSets,size_t kMaxOpenFileNumber);
 bool check_dirdiff(IDirDiffListener* listener,const TManifest& oldManifest,const TManifest& newManifest,
                    const hpatch_TStreamInput* testDiffData,hpatch_TDecompress* decompressPlugin,
-                   hpatch_TChecksum* checksumPlugin,size_t kMaxOpenFileNumber);
+                   hpatch_TChecksum* checksumPlugin,size_t kMaxOpenFileNumber,size_t threadNum=1);
 
 //check oldPath's data is same as that in dir_diff
 hpatch_BOOL check_dirOldDataChecksum(const char* oldPath,hpatch_TStreamInput* diffData,

@@ -29,9 +29,16 @@
 #define parallel_channel_h
 #include "parallel_import.h"
 #if (_IS_USED_MULTITHREAD)
-#include <stdint.h> //uint32
+#include <stdint.h> //uint32_t uint64_t
 #include <assert.h>
 #include <stddef.h> //for size_t ptrdiff_t
+
+#ifndef _IS_USED_CPP_ATOMIC
+#   define  _IS_USED_CPP_ATOMIC     1
+#endif
+#if (_IS_USED_CPP_ATOMIC)
+#   include <atomic>
+#endif
 
 struct CHLocker{
     HLocker locker;
@@ -39,25 +46,98 @@ struct CHLocker{
     inline ~CHLocker() { locker_delete(locker); }
 };
 
-#if (_IS_USED_CPP11THREAD)
-#   include <mutex>
-    struct CAutoLocker:public _TLockerBox_name {
-        inline CAutoLocker(HLocker _locker)
-            :_TLockerBox_name(){ if (_locker) { _TLockerBox_name _t(*(std::mutex*)_locker); _t.swap(*this); }  }
-        inline ~CAutoLocker(){ }
-    };
-#else
-    struct CAutoLocker:public TLockerBox {
-        inline CAutoLocker(HLocker _locker){ locker=_locker; if (locker) locker_enter(locker); }
-        inline ~CAutoLocker(){ if (locker) locker_leave(locker); }
+struct CAutoLocker{
+    inline explicit CAutoLocker(HLocker _locker){ locker=_locker; if (locker) locker_enter(locker); }
+    inline explicit CAutoLocker(CHLocker& _locker){ locker=_locker.locker; if (locker) locker_enter(locker); }
+    inline ~CAutoLocker(){ if (locker) locker_leave(locker); }
+    HLocker locker;
+};
+hpatch_force_inline static
+void        condvar_wait(HCondvar cond,CAutoLocker* locker) { condvar_wait_at(cond,locker->locker); }
+
+#if ((_IS_USED_CPP_ATOMIC) && (!_IS_NO_ATOMIC_U64))
+    class CWaitValueByAtomic{
+    public:
+        inline explicit CWaitValueByAtomic(uint64_t initValue=0) : _value(initValue) {}
+        inline void     store(uint64_t value) { _value.store(value); }
+        inline uint64_t load() const { return _value.load(); }
+        template<class TFailFunc,class TFailImport>
+        bool wait(uint64_t value,TFailFunc failWaitCallBackFunc,const TFailImport* failWaitImport){
+            while (true){
+                if (_value.load()==value) return true;
+                this_thread_yield();
+                if (failWaitCallBackFunc(failWaitImport)) return false;
+            }
+        }
+    private:
+        volatile std::atomic<uint64_t>  _value;
     };
 #endif
 
-    //通道交互数据;
-    typedef void* TChanData;
+    class CWaitValueByLocker{ //CWaitValueByLocker
+    public:
+        inline explicit CWaitValueByLocker(uint64_t initValue=0):_value(initValue) {}
+        inline void     store(uint64_t value) { CAutoLocker _autoLocker(_locker.locker); _value=value; }
+        inline uint64_t load() const { CAutoLocker _autoLocker(_locker.locker); return _value; }
+        template<class TFailFunc,class TFailImport>
+        bool wait(uint64_t value,TFailFunc failWaitCallBackFunc,const TFailImport* failWaitImport){
+            while (true){
+                {
+                    CAutoLocker _autoLocker(_locker.locker);
+                    if (_value==value) return true;
+                }
+                this_thread_yield();
+                if (failWaitCallBackFunc(failWaitImport)) return false;
+            }
+        }
+    private:
+        CHLocker            _locker;
+        volatile uint64_t   _value;
+    };
+
+    class CWaitValueByCondvar{ //CWaitValueByCondvar
+    public:
+        inline explicit CWaitValueByCondvar(uint64_t initValue=0):_value(initValue),_condvar(0){
+            _condvar=condvar_new();
+        }
+        inline ~CWaitValueByCondvar(){ condvar_delete(_condvar); }
+        inline void     store(uint64_t value){
+            CAutoLocker _autoLocker(_locker.locker);
+            if (_value==value) return; //no need notify
+            _value=value;
+            condvar_broadcast(_condvar);
+        }
+        inline uint64_t load(){
+            CAutoLocker _autoLocker(_locker.locker);
+            return _value;
+        }
+        template<class TFailFunc,class TFailImport>
+        bool wait(uint64_t expectedValue,TFailFunc failWaitCallBackFunc,const TFailImport* failWaitImport){
+            while (true){
+                {
+                    CAutoLocker _autoLocker(_locker.locker);
+                    if (_value==expectedValue) return true;
+                    condvar_wait(_condvar,&_autoLocker);
+                    if (_value==expectedValue) return true;
+                }
+                if (failWaitCallBackFunc(failWaitImport)) return false;
+            }
+        }
+    private:
+        volatile uint64_t   _value;
+        CHLocker            _locker;
+        HCondvar            _condvar;
+    };
+
+// CWaitValue: thread waits for a value before it can continue;
+#if ((_IS_USED_CPP_ATOMIC) && (!_IS_NO_ATOMIC_U64))
+    typedef CWaitValueByAtomic CWaitValue;
+#else
+    typedef CWaitValueByLocker CWaitValue; 
+#endif
 
     class _CChannel_import;
-    //通道;
+    //Channel;
     class CChannel{
     public:
         explicit CChannel(ptrdiff_t maxDataCount=-1);
@@ -70,7 +150,7 @@ struct CHLocker{
         _CChannel_import* _import;
     };
 
-//用通道传递来共享数据;
+//Share data via channel passing;
 struct TMtByChannel {
     CChannel read_chan;
     CChannel work_chan;
@@ -78,9 +158,14 @@ struct TMtByChannel {
 
     void on_error(){
         {
+        #if (_IS_USED_CPP_ATOMIC)
+            if (_is_on_error.load()) return;
+            _is_on_error.store(true);
+        #else
             CAutoLocker _auto_locker(_locker.locker);
             if (_is_on_error) return;
             _is_on_error=true;
+        #endif
         }
         closeAndClear();
     }
@@ -114,9 +199,17 @@ struct TMtByChannel {
 
     inline  explicit TMtByChannel():_is_on_error(false),_is_thread_on(0) {}
     inline ~TMtByChannel() { closeAndClear(); wait_all_thread_end(); _end_chan.close(); while (_end_chan.accept(false)) {} }
-    inline bool is_on_error()const{ CAutoLocker _auto_locker(_locker.locker); return _is_on_error; }
+    inline bool is_on_error()const{ 
+        #if (_IS_USED_CPP_ATOMIC)
+            return _is_on_error.load();
+        #else
+            CAutoLocker _auto_locker(_locker.locker);
+            return _is_on_error;
+        #endif
+        }
+    inline static bool is_on_error_by(const TMtByChannel* mt){ return mt->is_on_error(); }
     
-    inline void finish(){ // wait all threads exit
+    inline void finish(){ // stop & wait all threads exit
         close();
         wait_all_thread_end();
     }
@@ -128,7 +221,11 @@ struct TMtByChannel {
     }
 protected:
     CHLocker  _locker;
+#if (_IS_USED_CPP_ATOMIC)
+    volatile std::atomic<bool> _is_on_error;
+#else
     volatile bool _is_on_error;
+#endif
     
     inline void close() {
         read_chan.close();

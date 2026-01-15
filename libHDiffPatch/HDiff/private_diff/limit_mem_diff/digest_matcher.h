@@ -1,6 +1,6 @@
 //digest_matcher.h
-//用摘要匹配的办法代替后缀数组的匹配,匹配效果比后缀数差,但内存占用少;
-//用adler计算数据的摘要信息,以便于滚动匹配.
+//Use digest matching instead of suffix array matching - less effective but uses less memory;
+//Use adler to calculate data digest information for rolling match.
 //
 /*
  The MIT License (MIT)
@@ -40,7 +40,7 @@ typedef uint64_t        adler_uint_t;
 #define adler_start     fast_adler64_start
 #define adler_roll      fast_adler64_roll
 typedef uint64_t        adler_hash_t;
-static inline adler_hash_t adler_to_hash(const uint64_t x){ return x; }
+static hpatch_force_inline adler_hash_t adler_to_hash(const uint64_t x){ return x; }
 
 //typedef adler128_t      adler_uint_t;
 //#define adler_start     fast_adler128_start
@@ -88,7 +88,7 @@ private:
     size_t getSearchThreadNum()const;
     void _search_cover(const hpatch_TStreamInput* newData,hpatch_StreamPos_t newOffset,
                        hpatch_TOutputCovers* out_covers,unsigned char* pmem,
-                       void* dataLocker=0,void* newDataLocker=0);
+                       void* oldDataLocker=0,void* newDataLocker=0,void* dataLocker=0);
 public: //private for multi-thread
     void _search_cover_thread(hpatch_TOutputCovers* out_covers,unsigned char* pmem,void* mt_data);
 };
