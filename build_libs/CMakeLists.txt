@@ -30,18 +30,39 @@ file(GLOB_RECURSE libHDiffPatch "../libHDiffPatch/*")
 file(GLOB_RECURSE libParallel "../libParallel/*")
 
 # 搜集源文件
-file(GLOB_RECURSE SOURCES "HDiffPatch.cpp")
+file(GLOB_RECURSE SOURCES "source/*.cpp")
 
-# 添加到库
-include_directories(${PROJECT_SOURCE_DIR})
+# 搜集公开头文件
+file(GLOB_RECURSE PUBLIC_HEADERS "include/*.h")
 
 # 构建库
-add_library(HDiffPatchStatic STATIC ${libHDiffPatch} ${libParallel} ${SOURCES})
-add_library(HDiffPatchShared SHARED ${libHDiffPatch} ${libParallel} ${SOURCES})
+add_library(HDiffPatchStatic STATIC ${libHDiffPatch} ${libParallel} ${SOURCES} ${PUBLIC_HEADERS})
+add_library(HDiffPatchShared SHARED ${libHDiffPatch} ${libParallel} ${SOURCES} ${PUBLIC_HEADERS})
 
-# 设置库的输出目录
-set_target_properties(HDiffPatchStatic PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
-set_target_properties(HDiffPatchShared PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+# 设置包含目录
+foreach(TARGET HDiffPatchStatic HDiffPatchShared)
+    target_include_directories(${TARGET} 
+        PUBLIC "include"
+        PRIVATE "source"
+    )
+endforeach()
+
+# 设置库的输出名称（不带 Static/Shared 后缀）
+set_target_properties(HDiffPatchStatic PROPERTIES OUTPUT_NAME "HDiffPatch")
+set_target_properties(HDiffPatchShared PROPERTIES OUTPUT_NAME "HDiffPatch")
+
+# 设置库的输出目录，区分静态库和动态库以避免文件名冲突
+set_target_properties(HDiffPatchStatic PROPERTIES
+    ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/static"
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/static"
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/static"
+)
+
+set_target_properties(HDiffPatchShared PROPERTIES
+    ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/shared"
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/shared"
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/shared"
+)
 
 # 库类型宏
 target_compile_definitions(HDiffPatchStatic PRIVATE HDIFFPATCH_STATIC_LIB=1)
@@ -62,7 +83,16 @@ elseif(IOS)
     target_compile_definitions(HDiffPatchStatic PRIVATE HDIFFPATCH_PLATFORM_IOS)
     target_compile_definitions(HDiffPatchShared PRIVATE HDIFFPATCH_PLATFORM_IOS)
     set_target_properties(HDiffPatchStatic PROPERTIES XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED "NO")
-    set_target_properties(HDiffPatchShared PROPERTIES XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED "NO")
+    
+    # 配置 iOS Framework
+    set_target_properties(HDiffPatchShared PROPERTIES
+        FRAMEWORK TRUE
+        MACOSX_FRAMEWORK_IDENTIFIER "com.hdiffpatch.HDiffPatch"
+        PUBLIC_HEADER "${PUBLIC_HEADERS}"
+        XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED "NO"
+        XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY ""
+        XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED "NO"
+    )
 elseif(UNIX AND NOT APPLE)
     target_compile_definitions(HDiffPatchStatic PRIVATE HDIFFPATCH_PLATFORM_LINUX)
     target_compile_definitions(HDiffPatchShared PRIVATE HDIFFPATCH_PLATFORM_LINUX)

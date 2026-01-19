@@ -1,0 +1,303 @@
+# This starter workflow is for a CMake project running on multiple platforms. There is a different starter workflow if you just want a single platform.
+# See: https://github.com/actions/starter-workflows/blob/main/ci/cmake-single-platform.yml
+# 构建UE插件
+#
+
+name: CMake on multiple platforms
+
+#on: [push, pull_request]
+on:
+  workflow_dispatch:
+    inputs:
+      tag_date:
+        description: 'tag date'     
+        required: true
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    env: # update README for devs if you modify these env. variables
+      QT_VERSION: '6.6.3' # use scripts/update_qt_version.bash to change
+      ANDROIDAPI: 26
+      NDK_VERSION: '27.0.12077973'
+      NDK_VERSION_FULL: r27
+      JDK_VERSION: 17
+      SDK_PLATFORM: android-35
+      SDK_BUILD_TOOLS: 35.0.1
+      XC_VERSION: ${{ '16.3' }}
+      CMAKE_VERSION: '3.29.0'
+      VCPKG_ROOT: "${{ github.workspace }}/vcpkg"
+
+    strategy:
+      # Set fail-fast to false to ensure that feedback is delivered for all matrix combinations. Consider changing this to true when your workflow is stable.
+      fail-fast: false
+      matrix:
+        build_target: [windows-x64, windows-x86, android-arm64, android-armeabi, android-x86, android-x86_64, linux-arm, linux-x86, linux-x64, macos, ios]
+        build_type: [Release]
+        include:
+          - build_target: windows-x64
+            os: windows-latest
+            preset: windows-x64
+          - build_target: windows-x86
+            os: windows-latest
+            preset: windows-x86
+          - build_target: android-arm64
+            os: ubuntu-latest
+            preset: android-arm64
+          - build_target: android-armeabi
+            os: ubuntu-latest
+            preset: android-armeabi
+          - build_target: android-x86
+            os: ubuntu-latest
+            preset: android-x86
+          - build_target: android-x86_64
+            os: ubuntu-latest
+            preset: android-x86_64
+          - build_target: linux-arm
+            os: ubuntu-latest
+            preset: linux-arm
+          - build_target: linux-x86
+            os: ubuntu-latest
+            preset: linux-x86
+          - build_target: linux-x64
+            os: ubuntu-latest
+            preset: linux-x64
+          - build_target: macos
+            os: macos-latest
+            preset: macos
+          - build_target: ios
+            os: macos-latest
+            preset: ios
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set reusable strings
+      # Turn repeated input strings (such as the build output directory) into step outputs. These step outputs can be used throughout the workflow file.
+      id: strings
+      shell: bash
+      run: |
+        echo "build-output-dir=${{ github.workspace }}/build/${{ matrix.preset }}" >> "$GITHUB_OUTPUT"
+        echo "cmake-dir=${{ github.workspace }}/build_libs" >> "$GITHUB_OUTPUT"
+
+    - name: Install CMake and Ninja
+      uses: lukka/get-cmake@latest
+      with:
+        cmakeVersion: ${{ env.CMAKE_VERSION }}
+
+    - name: Setup Xcode
+      if: startsWith(matrix.os, 'macos')
+      uses: maxim-lobanov/setup-xcode@v1
+      with:
+        xcode-version: ${{ env.XC_VERSION }}
+
+    - name: Setup MSVC (Windows)
+      if: startsWith(matrix.preset, 'windows')
+      uses: ilammy/msvc-dev-cmd@v1.4.1
+
+    - name: Set up NDK
+      if: startsWith(matrix.preset, 'android')
+      uses: nttld/setup-ndk@v1
+      id: setup-ndk
+      with:
+        ndk-version: ${{ env.NDK_VERSION_FULL }}
+        add-to-path: true
+        local-cache: false
+
+    - name: Set up JDK
+      if: startsWith(matrix.preset, 'android')
+      uses: actions/setup-java@v2
+      with:
+       java-version: ${{ env.JDK_VERSION }}
+       distribution: zulu
+
+    - name: Setup Android SDK
+      if: startsWith(matrix.preset, 'android')
+      uses: malinskiy/action-android/install-sdk@release/0.1.2
+
+    - name: Install Android Tools
+      if: startsWith(matrix.preset, 'android')
+      run: |
+        sdkmanager --licenses && sdkmanager --verbose "platforms;${SDK_PLATFORM}" "build-tools;${SDK_BUILD_TOOLS}" tools platform-tools
+
+      
+    - name: Set up Android SDK and NDK
+      if: startsWith(matrix.preset, 'android')
+      run: |
+        echo "NDK_ROOT=${{steps.setup-ndk.outputs.ndk-path}}" >> $GITHUB_ENV
+
+    - name: Configure CMake (Windows)
+      if: startsWith(matrix.preset, 'windows')
+      run: >
+        cmake -B ${{ steps.strings.outputs.build-output-dir }}
+        -S ${{ steps.strings.outputs.cmake-dir }}
+        --preset=${{ matrix.preset }}
+
+    - name: Configure CMake (Linux)
+      if: startsWith(matrix.preset, 'linux')
+      run: >
+        cmake -B ${{ steps.strings.outputs.build-output-dir }}
+        -S ${{ steps.strings.outputs.cmake-dir }}
+        --preset=${{ matrix.preset }}
+
+    - name: Configure CMake (Mac)
+      if: startsWith(matrix.preset, 'mac')
+      run: >
+        cmake -B ${{ steps.strings.outputs.build-output-dir }}
+        -S ${{ steps.strings.outputs.cmake-dir }}
+        --preset=${{ matrix.preset }}
+
+    - name: Configure CMake (iOS)
+      if: startsWith(matrix.preset, 'ios')
+      run: >
+        cmake -B ${{ steps.strings.outputs.build-output-dir }}
+        -S ${{ steps.strings.outputs.cmake-dir }}
+        --preset=${{ matrix.preset }}
+
+    - name: Configure CMake (Android)
+      if: startsWith(matrix.preset, 'android')
+      run: >
+        cmake -B ${{ steps.strings.outputs.build-output-dir }}
+        -S ${{ steps.strings.outputs.cmake-dir }}
+        -DCMAKE_ANDROID_NDK=${{ steps.setup-ndk.outputs.ndk-path }}
+        -DCMAKE_TOOLCHAIN_FILE=${{ steps.setup-ndk.outputs.ndk-path }}/build/cmake/android.toolchain.cmake
+        --preset=${{ matrix.preset }}
+
+    - name: Build
+      # Build your program with the given configuration. Note that --config is needed because the default Windows generator is a multi-config generator (Visual Studio generator).
+      run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.build_type }}
+
+
+    - name: Archive Build Result
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.preset }}
+        path: ${{ steps.strings.outputs.build-output-dir }}
+
+  release:
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: "v1.0.0_${{ github.event.inputs.tag_date }}"
+    needs: [build]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: archive
+
+      - name: Display structure of downloaded files
+        run: ls -R
+
+      - name: Copy UEPlugins
+        run: |
+          mkdir -p result
+          cp -r UEPlugins result/
+
+      - name: Copy Libs
+        shell: bash
+        run: |
+          # Define base path
+          BASE_PATH="result/UEPlugins/PPakPatcher/Source/PPakPatcher/ThirdParty/HDiffPatch"
+          
+          # Helper function to copy and rename
+          copy_lib() {
+            local src=$1
+            local dest_dir=$2
+            local dest_name=$3
+            mkdir -p "$dest_dir"
+            cp -R "$src" "$dest_dir/$dest_name"
+          }
+
+          # Windows x86
+          copy_lib "archive/windows-x86/static/HDiffPatch.lib" "$BASE_PATH/lib/windows/x86" "HDiffPatch.lib"
+          copy_lib "archive/windows-x86/shared/HDiffPatch.dll" "$BASE_PATH/shared/windows/x86" "HDiffPatch.dll"
+
+          # Windows x64
+          copy_lib "archive/windows-x64/static/HDiffPatch.lib" "$BASE_PATH/lib/windows/x64" "HDiffPatch.lib"
+          copy_lib "archive/windows-x64/shared/HDiffPatch.dll" "$BASE_PATH/shared/windows/x64" "HDiffPatch.dll"
+
+          # Android
+          # Mapping: archive_name -> dest_name
+          # android-arm64 -> arm64
+          # android-armeabi -> armeabi
+          # android-x86 -> x86
+          # android-x86_64 -> x86_64
+          
+          copy_lib "archive/android-arm64/static/libHDiffPatch.a" "$BASE_PATH/lib/android/arm64" "libHDiffPatch.a"
+          copy_lib "archive/android-arm64/shared/libHDiffPatch.so" "$BASE_PATH/shared/android/arm64" "libHDiffPatch.so"
+          
+          copy_lib "archive/android-armeabi/static/libHDiffPatch.a" "$BASE_PATH/lib/android/armeabi" "libHDiffPatch.a"
+          copy_lib "archive/android-armeabi/shared/libHDiffPatch.so" "$BASE_PATH/shared/android/armeabi" "libHDiffPatch.so"
+          
+          copy_lib "archive/android-x86/static/libHDiffPatch.a" "$BASE_PATH/lib/android/x86" "libHDiffPatch.a"
+          copy_lib "archive/android-x86/shared/libHDiffPatch.so" "$BASE_PATH/shared/android/x86" "libHDiffPatch.so"
+          
+          copy_lib "archive/android-x86_64/static/libHDiffPatch.a" "$BASE_PATH/lib/android/x86_64" "libHDiffPatch.a"
+          copy_lib "archive/android-x86_64/shared/libHDiffPatch.so" "$BASE_PATH/shared/android/x86_64" "libHDiffPatch.so"
+
+          # Linux
+          copy_lib "archive/linux-arm/static/libHDiffPatch.a" "$BASE_PATH/lib/linux/arm" "libHDiffPatch.a"
+          copy_lib "archive/linux-arm/shared/libHDiffPatch.so" "$BASE_PATH/shared/linux/arm" "libHDiffPatch.so"
+          
+          copy_lib "archive/linux-x86/static/libHDiffPatch.a" "$BASE_PATH/lib/linux/x86" "libHDiffPatch.a"
+          copy_lib "archive/linux-x86/shared/libHDiffPatch.so" "$BASE_PATH/shared/linux/x86" "libHDiffPatch.so"
+          
+          copy_lib "archive/linux-x64/static/libHDiffPatch.a" "$BASE_PATH/lib/linux/x64" "libHDiffPatch.a"
+          copy_lib "archive/linux-x64/shared/libHDiffPatch.so" "$BASE_PATH/shared/linux/x64" "libHDiffPatch.so"
+
+          # macOS
+          copy_lib "archive/macos/static/Release/libHDiffPatch.a" "$BASE_PATH/lib/macos" "libHDiffPatch.a"
+          copy_lib "archive/macos/shared/Release/libHDiffPatch.dylib" "$BASE_PATH/shared/macos" "libHDiffPatch.dylib"
+
+          # iOS
+          copy_lib "archive/ios/static/Release-iphoneos/libHDiffPatch.a" "$BASE_PATH/lib/ios" "libHDiffPatch.a"
+          copy_lib "archive/ios/shared/Release-iphoneos/HDiffPatch.framework" "$BASE_PATH/shared/ios" "HDiffPatch.framework"
+
+      - name: Copy Head
+        shell: bash
+        run: |
+          BASE_PATH="result/UEPlugins/PPakPatcher/Source/PPakPatcher/ThirdParty/HDiffPatch"
+          mkdir -p $BASE_PATH/include
+          cp build_libs/include/*.h $BASE_PATH/include/
+
+      - name: Zip Result
+        run: |
+          cd result
+          zip -r ../UEPlugins-PakPatcher.zip UEPlugins
+
+      #- name: Delete the current release
+      #  run: |
+      #    curl -X DELETE -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" "https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ env.RELEASE_TAG }}"
+      #  continue-on-error: true # 在此步骤失败时继续执行工作流程
+
+      #- name: Delete the current release
+      #  uses: liudonghua123/delete-release-action@v1
+      #  continue-on-error: true # 添加这一行
+      #  env:
+      #    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      #  with:
+      #    release_name: ${{ env.RELEASE_TAG }}
+      #    suppress_errors: true
+      #    token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create a new release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          release_name: Release ${{ env.RELEASE_TAG }}
+          draft: false
+          prerelease: false
+
+      - name: Upload release assets
+        id: upload_release_assets
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./UEPlugins-PakPatcher.zip
+          asset_name: UEPlugins-PakPatcher.zip
+          asset_content_type: application/zip

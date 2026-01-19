@@ -1,0 +1,29 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "1.0",
+	"FriendlyName": "PPakPatcher",
+	"Description": "使用HDiffPatch给Pak生成补丁和打补丁",
+	"Category": "Other",
+	"CreatedBy": "daxingjin",
+	"CreatedByURL": "",
+	"DocsURL": "",
+	"MarketplaceURL": "",
+	"SupportURL": "",
+	"CanContainContent": true,
+	"IsBetaVersion": false,
+	"IsExperimentalVersion": false,
+	"Installed": false,
+	"Modules": [
+		{
+			"Name": "PPakPatcher",
+			"Type": "Runtime",
+			"LoadingPhase": "PostConfigInit"
+		},
+		{
+			"Name": "PPakPatcherEditor",
+			"Type": "Editor",
+			"LoadingPhase": "Default"
+		}
+	]
+}

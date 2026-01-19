@@ -15,13 +15,13 @@ jobs:
     runs-on: ${{ matrix.os }}
     env: # update README for devs if you modify these env. variables
       QT_VERSION: '6.6.3' # use scripts/update_qt_version.bash to change
-      ANDROIDAPI: 29
-      NDK_VERSION: '25.1.8937393'
-      NDK_VERSION_FULL: r21e
-      JDK_VERSION: 11
-      SDK_PLATFORM: android-21
-      SDK_BUILD_TOOLS: 33.0.1
-      XC_VERSION: ${{ '15.2' }}
+      ANDROIDAPI: 26
+      NDK_VERSION: '27.0.12077973'
+      NDK_VERSION_FULL: r27
+      JDK_VERSION: 17
+      SDK_PLATFORM: android-35
+      SDK_BUILD_TOOLS: 35.0.1
+      XC_VERSION: ${{ '16.3' }}
       CMAKE_VERSION: '3.29.0'
       VCPKG_ROOT: "${{ github.workspace }}/vcpkg"
 
