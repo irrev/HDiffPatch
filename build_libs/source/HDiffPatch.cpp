@@ -1,12 +1,12 @@
 ﻿// HDiffPatch.cpp : Defines the entry point for the application.
 //
 
-#include "../libHDiffPatch/HDiffPatch.h"
+#include "HDiffPatch.h"
 
 #if HDIFFPATCH_ENABLE_DIFF
-#include "../libHDiffPatch/HDiff/diff.h"
+#include "libHDiffPatch/HDiff/diff.h"
 #endif //HDIFFPATCH_ENABLE_DIFF
-#include "../libHDiffPatch/HPatch/patch.h"
+#include "libHDiffPatch/HPatch/patch.h"
 
 namespace HDiffPatch
 {

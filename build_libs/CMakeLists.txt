@@ -44,6 +44,7 @@ foreach(TARGET HDiffPatchStatic HDiffPatchShared)
     target_include_directories(${TARGET} 
         PUBLIC "include"
         PRIVATE "source"
+        PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/.."
     )
 endforeach()
 
