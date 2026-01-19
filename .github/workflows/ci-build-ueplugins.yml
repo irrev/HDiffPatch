@@ -250,8 +250,26 @@ jobs:
           copy_lib "archive/macos/shared/Release/libHDiffPatch.dylib" "$BASE_PATH/shared/macos" "libHDiffPatch.dylib"
 
           # iOS
-          copy_lib "archive/ios/static/Release-iphoneos/libHDiffPatch.a" "$BASE_PATH/lib/ios" "libHDiffPatch.a"
-          copy_lib "archive/ios/shared/Release-iphoneos/HDiffPatch.framework" "$BASE_PATH/shared/ios" "HDiffPatch.framework"
+          IOS_STATIC_LIB=$(find archive/ios -name "libHDiffPatch.a" | head -n 1)
+          if [ -f "$IOS_STATIC_LIB" ]; then
+            echo "Found iOS static lib at: $IOS_STATIC_LIB"
+            copy_lib "$IOS_STATIC_LIB" "$BASE_PATH/lib/ios" "libHDiffPatch.a"
+          else
+            echo "Error: libHDiffPatch.a not found in archive/ios"
+            find archive/ios -name "libHDiffPatch.a" # Print if any exist but failed check
+            ls -R archive/ios # Debug output
+            exit 1
+          fi
+
+          IOS_FRAMEWORK=$(find archive/ios -name "HDiffPatch.framework" -type d | head -n 1)
+          if [ -d "$IOS_FRAMEWORK" ]; then
+            echo "Found iOS framework at: $IOS_FRAMEWORK"
+            copy_lib "$IOS_FRAMEWORK" "$BASE_PATH/shared/ios" "HDiffPatch.framework"
+          else
+            echo "Error: HDiffPatch.framework not found in archive/ios"
+            ls -R archive/ios # Debug output
+            exit 1
+          fi
 
       - name: Copy Head
         shell: bash
