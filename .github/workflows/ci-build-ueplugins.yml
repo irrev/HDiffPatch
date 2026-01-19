@@ -3,7 +3,7 @@
 # 构建UE插件
 #
 
-name: CMake on multiple platforms
+name: CMake UEPlugins-PakPatcher
 
 #on: [push, pull_request]
 on:
