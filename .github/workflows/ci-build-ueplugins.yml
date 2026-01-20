@@ -71,6 +71,22 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: Checkout Dependencies
+      shell: bash
+      run: |
+        git clone https://github.com/sisong/libmd5.git ../libmd5
+        git clone https://github.com/sisong/xxHash.git ../xxHash
+        git clone https://github.com/sisong/lzma.git ../lzma
+        git clone https://github.com/sisong/zstd.git ../zstd
+        git clone https://github.com/sisong/zlib.git ../zlib
+        git clone https://github.com/sisong/libdeflate.git ../libdeflate
+
+    - name: Checkout Dependencies (Windows)
+      if: startsWith(matrix.os, 'windows')
+      shell: bash
+      run: |
+        git clone https://github.com/sisong/bzip2.git ../bzip2
+
     - name: Set reusable strings
       # Turn repeated input strings (such as the build output directory) into step outputs. These step outputs can be used throughout the workflow file.
       id: strings
