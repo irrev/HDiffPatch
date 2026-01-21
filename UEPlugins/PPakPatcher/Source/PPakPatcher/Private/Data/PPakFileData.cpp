@@ -1,5 +1,5 @@
 #include "Data/PPakFileData.h"
-#include "Data/PPakPacherDataType.h"
+#include "Data/PPakPatcherDataType.h"
 #include "Data/PPakPatcherKeyChainHelper.h"
 #include "PPakPatcherSettings.h"
 
@@ -63,7 +63,7 @@ bool FPPakFileData::LoadFromFile(const FString& InPakFilename)
 }
 
 
-FArchive* FPPakFileData::GetSharedReader(IPlatformFile* LowerLevel)
+FSharedPakReader FPPakFileData::GetSharedReader(IPlatformFile* LowerLevel)
 {
 	return PakFilePtr->GetSharedReader(LowerLevel);
 }
@@ -135,17 +135,18 @@ bool FPPakFileData::PreCheckDecript()
 		{
 			const FNamedAESKey* FoundKey = nullptr;
 			FKeyChain& KeyChain = FPPakPatcherKeyChainHelper::Get().GetKeyChain();
-			if (KeyChain.MasterEncryptionKey)
+			if (KeyChain.GetPrincipalEncryptionKey())
 			{
-				if (TryDecryptPak(Reader, Info, *KeyChain.MasterEncryptionKey))
+				if (TryDecryptPak(Reader, Info, *KeyChain.GetPrincipalEncryptionKey()))
 				{
-					FoundKey = KeyChain.MasterEncryptionKey;
+					FoundKey = KeyChain.GetPrincipalEncryptionKey();
 				}
 			}
-			if (FoundKey == nullptr && KeyChain.EncryptionKeys.Num())
+			if (FoundKey == nullptr && KeyChain.GetEncryptionKeys().Num())
 			{
 				// try other keys.
-				for (auto It = KeyChain.EncryptionKeys.CreateConstIterator(); It; ++It)
+				for (auto It = KeyChain.GetEncryptionKeys().CreateConstIterator(); It; ++It)
+
 				{
 					const FNamedAESKey& Key = It.Value();
 					if (TryDecryptPak(Reader, Info, Key))

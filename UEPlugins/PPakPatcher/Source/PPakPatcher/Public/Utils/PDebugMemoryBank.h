@@ -1,4 +1,7 @@
 #pragma once
+#include "CoreMinimal.h"
+#include "Data/PPakFileData.h"
+
 class PPAKPATCHER_API FPDebugMemoryBank
 {
 public:

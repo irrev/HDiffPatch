@@ -1,9 +1,11 @@
 #pragma once
 #include "CoreMinimal.h"
-#include "PPakPacherDataType.generated.h"
+#include "Runtime/Launch/Resources/Version.h"
+#include "PPakPatcherDataType.generated.h"
 
 DECLARE_LOG_CATEGORY_EXTERN(LogPPakPacher, Log, All);
 
+UENUM()
 enum class EPPatchDataSourceType : uint8
 {
 	None,
@@ -11,6 +13,7 @@ enum class EPPatchDataSourceType : uint8
 	Record,
 };
 
+UENUM()
 enum class EPakFilePatchType : uint8
 {
 	Keep,
@@ -18,6 +21,7 @@ enum class EPakFilePatchType : uint8
 	New,
 	Delete,
 };
+
 
 #define PAKPATCHER_DECLEAR_ENUM_TO_STRING(EnumType) static FString ToString(EnumType InEnumValue)
 class PPAKPATCHER_API FPPakPatcherEnumHelper
@@ -29,7 +33,7 @@ public:
 #undef PAKPATCHER_DECLEAR_ENUM_TO_STRING
 
 UCLASS()
-class UPPakPacherDataType : public UObject
+class UPPakPatcherDataType : public UObject
 {
 	GENERATED_UCLASS_BODY()
 };

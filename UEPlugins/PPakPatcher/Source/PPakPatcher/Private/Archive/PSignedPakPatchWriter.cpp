@@ -3,6 +3,7 @@
 #include "IPlatformFilePak.h"
 #include "Misc/SecureHash.h"
 #include "HAL/FileManager.h"
+#include "Data/PPakPatcherDataType.h"
 #include "PPakPatcherSettings.h"
 
 FPSignedPakPatchWriter::FPSignedPakPatchWriter(FArchive& InPak, const FString& InPakFilename, const FRSAKeyHandle InSigningKey)

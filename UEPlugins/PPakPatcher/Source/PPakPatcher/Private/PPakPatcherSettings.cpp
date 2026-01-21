@@ -1,6 +1,6 @@
 #include "PPakPatcherSettings.h"
 #include "Misc/LazySingleton.h"
-
+#include "Misc/ConfigCacheIni.h"
 
 
 FPPakPatcherSettings& FPPakPatcherSettings::Get()

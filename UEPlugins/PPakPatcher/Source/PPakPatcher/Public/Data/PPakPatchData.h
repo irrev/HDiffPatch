@@ -4,7 +4,7 @@
 #include "IPlatformFilePak.h"
 #include "Templates/RefCounting.h"
 
-#include "Data/PPakPacherDataType.h"
+#include "Data/PPakPatcherDataType.h"
 #include "Data/PPakFileData.h"
 #include "Archive/PPakMemoryArchive.h"
 #include "Archive/PPakPatcherMemory.h"

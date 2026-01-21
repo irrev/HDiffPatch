@@ -3,7 +3,7 @@
 #include "CoreMinimal.h"
 #include "IPlatformFilePak.h"
 #include "Templates/RefCounting.h"
-#include "KeyChainUtilities.h"
+#include "Misc/KeyChainUtilities.h"
 
 
 class PPAKPATCHER_API FPPakFileData
@@ -14,7 +14,7 @@ public:
 	
 	bool LoadFromFile(const FString& InPakFilename);
 
-	FArchive* GetSharedReader(IPlatformFile* LowerLevel = nullptr);
+	FSharedPakReader GetSharedReader(IPlatformFile* LowerLevel = nullptr);
 	bool Compare(FPPakFileData& Other);
 	const FString& GetPakFileMD5();
 

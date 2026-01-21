@@ -1,5 +1,5 @@
-#include "PPakPatcherUtils.h"
-#include "PPakPacherDataType.h"
+#include "Utils/PPakPatcherUtils.h"
+#include "Data/PPakPatcherDataType.h"
 
 #include "PPakPatcherModule.h"
 

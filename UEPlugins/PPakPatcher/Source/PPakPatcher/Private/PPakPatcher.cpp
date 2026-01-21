@@ -1,7 +1,7 @@
 #include "PPakPatcher.h"
 #include "PakFileUtilities.h"
 #include "PPakPatcherModule.h"
-#include "Data/PPakPacherDataType.h"
+#include "Data/PPakPatcherDataType.h"
 #include "Data/PPakPatcherKeyChainHelper.h"
 #include "Archive/PPakMemoryArchive.h"
 #include "Archive/PSignedPakPatchWriter.h"
@@ -56,10 +56,12 @@ bool FPPakPatcher::CreatePakDiff(const FString& InPatchFilename, const FPPakFile
 	OutPatch->BeginRecord(InPatchFilename, InNewPak, InOldPak);
 
 	FPakFile& NewPakFile = *InNewPak->PakFilePtr;
-	FArchive& NewPakReader = *NewPakFile.GetSharedReader(NULL);
+	FSharedPakReader NewPakReader = NewPakFile.GetSharedReader(NULL);
+	FArchive& NewPakArchive = NewPakReader.GetArchive();
 
 	FPakFile& OldPakFile = *InOldPak->PakFilePtr;
-	FArchive& OldPakReader = *OldPakFile.GetSharedReader(NULL);
+    FSharedPakReader OldPakReader = OldPakFile.GetSharedReader(NULL);
+    FArchive& OldPakArchive = OldPakReader.GetArchive();
 
 	IPBinPatcher* BinPatcher = IPPakPatcherModule::Get().GetBinPatcher();
 
@@ -92,13 +94,13 @@ bool FPPakPatcher::CreatePakDiff(const FString& InPatchFilename, const FPPakFile
 
 		FString NewHash, OldHash;
 
-		NewPakReader.Seek(NewEntry.Offset);
+		NewPakArchive.Seek(NewEntry.Offset);
 
 		if (FPPakPatcherSettings::Get().bDoubleCheckEntry)
 		{
-			//double check new entry info and move NewPakReader into place
+			//double check new entry info and move NewPakArchive into place
 			FPakEntry NewEntryInfo;
-			NewEntryInfo.Serialize(NewPakReader, NewPakFile.GetInfo().Version);
+			NewEntryInfo.Serialize(NewPakArchive, NewPakFile.GetInfo().Version);
 			if (!NewEntryInfo.IndexDataEquals(NewEntry))
 			{
 				UE_LOG(LogPPakPacher, Error, TEXT("NewPakEntry double check failed. filename:%s"), *FileName);
@@ -113,12 +115,12 @@ bool FPPakPatcher::CreatePakDiff(const FString& InPatchFilename, const FPPakFile
 		if (FoundResult == FPakFile::EFindResult::Found)
 		{
 			const int64 OldRealSize = CalcEntryRealSize(OldEntry, OldPakFile);
-			OldPakReader.Seek(OldEntry.Offset);
+			OldPakArchive.Seek(OldEntry.Offset);
 			if (FPPakPatcherSettings::Get().bDoubleCheckEntry)
 			{
 				//double check old entry info and move OldPakReader into place
 				FPakEntry OldEntryInfo;
-				OldEntryInfo.Serialize(OldPakReader, OldPakFile.GetInfo().Version);
+				OldEntryInfo.Serialize(OldPakArchive, OldPakFile.GetInfo().Version);
 				if (!OldEntryInfo.IndexDataEquals(OldEntry))
 				{
 					UE_LOG(LogPPakPacher, Error, TEXT("OldPakEntry double check failed. filename:%s"), *FileName);
@@ -128,12 +130,12 @@ bool FPPakPatcher::CreatePakDiff(const FString& InPatchFilename, const FPPakFile
 			}
 
 			FPPakMemoryArchive NewPakWriter(NewRealSize);
-			NewPakReader.Seek(NewEntry.Offset);
-			NewPakReader.Serialize(NewPakWriter.GetData(), NewRealSize);
+			NewPakArchive.Seek(NewEntry.Offset);
+			NewPakArchive.Serialize(NewPakWriter.GetData(), NewRealSize);
 
 			FPPakMemoryArchive OldPakWriter(OldRealSize);
-			OldPakReader.Seek(OldEntry.Offset);
-			OldPakReader.Serialize(OldPakWriter.GetData(), OldRealSize);
+			OldPakArchive.Seek(OldEntry.Offset);
+			OldPakArchive.Serialize(OldPakWriter.GetData(), OldRealSize);
 
 			if (NewHash == OldHash &&
 				NewRealSize == OldRealSize &&
@@ -156,8 +158,8 @@ bool FPPakPatcher::CreatePakDiff(const FString& InPatchFilename, const FPPakFile
 		{
 			//record new file.
 			FPPakMemoryArchive MemWriter(NewRealSize);
-			NewPakReader.Seek(NewEntry.Offset);
-			NewPakReader.Serialize(MemWriter.GetData(), NewRealSize);
+			NewPakArchive.Seek(NewEntry.Offset);
+			NewPakArchive.Serialize(MemWriter.GetData(), NewRealSize);
 
 			OutPatch->RecordNew(FileName, NewPakFile, OldPakFile, NewEntry, MemWriter, NewRealSize);
 		}
@@ -169,14 +171,14 @@ bool FPPakPatcher::CreatePakDiff(const FString& InPatchFilename, const FPPakFile
 	auto RecordDataBlock = [&](FPPakPatchDataInfo& DataInfo, int64 NewOffset, int64 NewSize, int64 OldOffset, int64 OldSize, bool bIsPatchData)
 	{
 		FPPakMemoryArchive NewMemWriter(NewSize);
-		NewPakReader.Seek(NewOffset);
-		NewPakReader.Serialize(NewMemWriter.GetData(), NewSize);
+		NewPakArchive.Seek(NewOffset);
+		NewPakArchive.Serialize(NewMemWriter.GetData(), NewSize);
 
 		if (bIsPatchData)
 		{
 			FPPakMemoryArchive OldMemWriter(OldSize);
-			OldPakReader.Seek(OldOffset);
-			OldPakReader.Serialize(OldMemWriter.GetData(), OldSize);
+			OldPakArchive.Seek(OldOffset);
+			OldPakArchive.Serialize(OldMemWriter.GetData(), OldSize);
 
 			TArray<uint8> PatchData;
 			BinPatcher->CreateDiff(NewMemWriter.GetData(), NewMemWriter.GetSize(), OldMemWriter.GetData(), OldMemWriter.GetSize(), PatchData);
@@ -208,11 +210,11 @@ bool FPPakPatcher::CreatePakDiff(const FString& InPatchFilename, const FPPakFile
 		bool bIsPatchData = FPPakPatcherSettings::Get().bBinaryPatchPathBlock;
 
 		int64 NewOffset = NewPakInfo.IndexOffset + NewPakInfo.IndexSize;
-		int64 NewEnd = NewPakReader.TotalSize() - NewPakInfo.GetSerializedSize(NewPakInfo.Version) - 1;
+		int64 NewEnd = NewPakArchive.TotalSize() - NewPakInfo.GetSerializedSize(NewPakInfo.Version) - 1;
 		int64 NewSize = NewEnd - NewOffset + 1;
 
 		int64 OldOffset = OldPakInfo.IndexOffset + OldPakInfo.IndexSize;
-		int64 OldEnd = OldPakReader.TotalSize() - OldPakInfo.GetSerializedSize(OldPakInfo.Version) - 1;
+		int64 OldEnd = OldPakArchive.TotalSize() - OldPakInfo.GetSerializedSize(OldPakInfo.Version) - 1;
 		int64 OldSize = OldEnd - OldOffset + 1;
 
 		RecordDataBlock(OutPatch->Info.PathPatchInfo, NewOffset, NewSize, OldOffset, OldSize, bIsPatchData);
@@ -223,9 +225,9 @@ bool FPPakPatcher::CreatePakDiff(const FString& InPatchFilename, const FPPakFile
 		bool bIsPatchData = FPPakPatcherSettings::Get().bBinaryPatchHeadBlock;
 
 		int64 NewSize = NewPakInfo.GetSerializedSize(NewPakInfo.Version);
-		int64 NewOffset = NewPakReader.TotalSize() - NewSize;
+		int64 NewOffset = NewPakArchive.TotalSize() - NewSize;
 		int64 OldSize = OldPakInfo.GetSerializedSize(OldPakInfo.Version);
-		int64 OldOffset = OldPakReader.TotalSize() - OldSize;
+		int64 OldOffset = OldPakArchive.TotalSize() - OldSize;
 
 		RecordDataBlock(OutPatch->Info.HeadPatchInfo, NewOffset, NewSize, OldOffset, OldSize, bIsPatchData);
 	}
@@ -277,8 +279,9 @@ FArchive* CreatePakPatchWriter(const TCHAR* Filename, const FKeyChain& InKeyChai
 		if (bSign && FPPakPatcherSettings::Get().bUseSignWriter)
 		{
 			UE_LOG(LogPPakPacher, Display, TEXT("Creating signed pak %s."), Filename);
-			Writer = new FPSignedPakPatchWriter(*Writer, Filename, InKeyChain.SigningKey);
+			Writer = new FPSignedPakPatchWriter(*Writer, Filename, InKeyChain.GetSigningKey());
 		}
+
 		else
 		{
 			UE_LOG(LogPPakPacher, Display, TEXT("Creating pak %s."), Filename);
@@ -321,7 +324,8 @@ bool FPPakPatcher::PatchPak(const FString& InNewPakFilename, const FPPakFileData
 
 	IPBinPatcher* BinPatcher = IPPakPatcherModule::Get().GetBinPatcher();
 	FPakFile& OldPakFile = *InOldPak->PakFilePtr;
-	FArchive& OldPakReader = *OldPakFile.GetSharedReader(NULL);
+	FSharedPakReader OldPakReader = OldPakFile.GetSharedReader(NULL);
+    FArchive& OldPakArchive = OldPakReader.GetArchive();
 
 	FKeyChain& KeyChain = FPPakPatcherKeyChainHelper::Get().GetKeyChain();
 	bool bSign = InPatch->Info.bSign;
@@ -372,12 +376,12 @@ bool FPPakPatcher::PatchPak(const FString& InNewPakFilename, const FPPakFileData
 			FPakFile::EFindResult FoundResult = OldPakFile.Find(OldPakFile.GetMountPoint() / FilePatchInfo.FileName, &OldEntry);
 			if (FoundResult == FPakFile::EFindResult::Found)
 			{
-				OldPakReader.Seek(OldEntry.Offset);
+				OldPakArchive.Seek(OldEntry.Offset);
 				if (FPPakPatcherSettings::Get().bDoubleCheckEntry)
 				{
 					//double check old entry info and move OldPakReader into place
 					FPakEntry OldEntryInfo;
-					OldEntryInfo.Serialize(OldPakReader, OldPakFile.GetInfo().Version);
+					OldEntryInfo.Serialize(OldPakArchive, OldPakFile.GetInfo().Version);
 					if (!OldEntryInfo.IndexDataEquals(OldEntry))
 					{
 						UE_LOG(LogPPakPacher, Error, TEXT("OldPakEntry double check failed. filename:%s"), *Filename);
@@ -394,8 +398,8 @@ bool FPPakPatcher::PatchPak(const FString& InNewPakFilename, const FPPakFileData
 
 			int64 OldRealSize = FilePatchInfo.OldFileRealSize;
 			FPPakMemoryArchive OldPakMemory(OldRealSize);
-			OldPakReader.Seek(FilePatchInfo.DataInfo.OldOffset);
-			OldPakReader.Serialize(OldPakMemory.GetData(), OldRealSize);
+			OldPakArchive.Seek(FilePatchInfo.DataInfo.OldOffset);
+			OldPakArchive.Serialize(OldPakMemory.GetData(), OldRealSize);
 
 			if (FilePatchInfo.PatchType == EPakFilePatchType::Keep)
 			{
@@ -431,8 +435,8 @@ bool FPPakPatcher::PatchPak(const FString& InNewPakFilename, const FPPakFileData
 			if (Info.bIsPatchData)
 			{
 				FPPakMemoryArchive OldPakMemory(Info.OldSize);
-				OldPakReader.Seek(Info.OldOffset);
-				OldPakReader.Serialize(OldPakMemory.GetData(), Info.OldSize);
+				OldPakArchive.Seek(Info.OldOffset);
+				OldPakArchive.Serialize(OldPakMemory.GetData(), Info.OldSize);
 
 				FPPakMemoryArchive NewPakMemory(Info.NewSize);
 
@@ -496,10 +500,12 @@ bool FPPakPatcher::CheckPakDiff(const FPPakFileDataPtr& InNewPak, const FPPakFil
 	const double StartTime = FPlatformTime::Seconds();
 
 	FPakFile& NewPakFile = *InNewPak->PakFilePtr;
-	FArchive& NewPakReader = *NewPakFile.GetSharedReader(NULL);
+	FSharedPakReader NewPakReader = NewPakFile.GetSharedReader(NULL);
+    FArchive& NewPakArchive = NewPakReader.GetArchive();
 
 	FPakFile& OldPakFile = *InOldPak->PakFilePtr;
-	FArchive& OldPakReader = *OldPakFile.GetSharedReader(NULL);
+    FSharedPakReader OldPakReader = OldPakFile.GetSharedReader(NULL);
+    FArchive& OldPakArchive = OldPakReader.GetArchive();
 
 	IPBinPatcher* BinPatcher = IPPakPatcherModule::Get().GetBinPatcher();
 
@@ -514,7 +520,7 @@ bool FPPakPatcher::CheckPakDiff(const FPPakFileDataPtr& InNewPak, const FPPakFil
 				{
 					return true;
 				}
-				if (NewPakReader.Tell() + Size > Reader.TotalSize())
+				if (NewPakArchive.Tell() + Size > Reader.TotalSize())
 				{
 					return false;
 				}
@@ -533,18 +539,18 @@ bool FPPakPatcher::CheckPakDiff(const FPPakFileDataPtr& InNewPak, const FPPakFil
 
 	FKeyChain& KeyChain = FPPakPatcherKeyChainHelper::Get().GetKeyChain();
 
-	NewPakReader.Seek(0);
+	NewPakArchive.Seek(0);
 
 	for (FPPakFilePatchInfo& FilePatchInfo : InPatch->Info.FilePatchInfos)
 	{
 		// check padding.
-		int64 StartOffset = NewPakReader.Tell();
+		int64 StartOffset = NewPakArchive.Tell();
 
 		// debug.
 		{
-			NewPakReader.Seek(StartOffset);
+			NewPakArchive.Seek(StartOffset);
 		}
-		if (!CheckReaderPaddingToOffset(NewPakReader, FilePatchInfo.DataInfo.NewOffset))
+		if (!CheckReaderPaddingToOffset(NewPakArchive, FilePatchInfo.DataInfo.NewOffset))
 		{
 			UE_LOG(LogPPakPacher, Error, TEXT("FPPakPatcher::CheckPakDiff - Check PakFile Padding Offset Failed. Offset:%lld, Size:%lld"), StartOffset, FilePatchInfo.DataInfo.NewOffset - StartOffset);
 			return false;
@@ -559,12 +565,12 @@ bool FPPakPatcher::CheckPakDiff(const FPPakFileDataPtr& InNewPak, const FPPakFil
 			FPakFile::EFindResult FoundResult = NewPakFile.Find(NewPakFile.GetMountPoint() / Filename, &NewEntry);
 			if (FoundResult == FPakFile::EFindResult::Found)
 			{
-				NewPakReader.Seek(NewEntry.Offset);
+				NewPakArchive.Seek(NewEntry.Offset);
 				if (FPPakPatcherSettings::Get().bDoubleCheckEntry)
 				{
 					//double check new entry info and move NewPakReader into place
 					FPakEntry _NewEntry;
-					_NewEntry.Serialize(NewPakReader, NewPakFile.GetInfo().Version);
+					_NewEntry.Serialize(NewPakArchive, NewPakFile.GetInfo().Version);
 					if (!_NewEntry.IndexDataEquals(NewEntry))
 					{
 						UE_LOG(LogPPakPacher, Error, TEXT("NewPakEntry double check failed. filename:%s, PakFilename:%s"), *Filename, *InNewPak->PakFilename);
@@ -582,15 +588,15 @@ bool FPPakPatcher::CheckPakDiff(const FPPakFileDataPtr& InNewPak, const FPPakFil
 
 		int64 NewRealSize = FilePatchInfo.FileRealSize;
 		FPPakMemoryArchive NewPakMemory(NewRealSize);
-		NewPakReader.Seek(NewEntry.Offset);
-		NewPakReader.Serialize(NewPakMemory.GetData(), NewRealSize);
+		NewPakArchive.Seek(NewEntry.Offset);
+		NewPakArchive.Serialize(NewPakMemory.GetData(), NewRealSize);
 
 		if (FilePatchInfo.PatchType == EPakFilePatchType::Keep || FilePatchInfo.PatchType == EPakFilePatchType::Modify)
 		{
 			int64 OldRealSize = FilePatchInfo.OldFileRealSize;
 			FPPakMemoryArchive OldPakMemory(OldRealSize);
-			OldPakReader.Seek(FilePatchInfo.DataInfo.OldOffset);
-			OldPakReader.Serialize(OldPakMemory.GetData(), OldRealSize);
+			OldPakArchive.Seek(FilePatchInfo.DataInfo.OldOffset);
+			OldPakArchive.Serialize(OldPakMemory.GetData(), OldRealSize);
 
 			if (FilePatchInfo.PatchType == EPakFilePatchType::Keep)
 			{
@@ -644,14 +650,14 @@ bool FPPakPatcher::CheckPakDiff(const FPPakFileDataPtr& InNewPak, const FPPakFil
 		{
 			uint8* PatchData = InPatch->GetFilePatchData(Info);
 			FPPakMemoryArchive NewPakMemory(Info.NewSize);
-			NewPakReader.Seek(Info.NewOffset);
-			NewPakReader.Serialize(NewPakMemory.GetData(), Info.NewSize);
+			NewPakArchive.Seek(Info.NewOffset);
+			NewPakArchive.Serialize(NewPakMemory.GetData(), Info.NewSize);
 
 			if (Info.bIsPatchData)
 			{
 				FPPakMemoryArchive OldPakMemory(Info.OldSize);
-				OldPakReader.Seek(Info.OldOffset);
-				OldPakReader.Serialize(OldPakMemory.GetData(), Info.OldSize);
+				OldPakArchive.Seek(Info.OldOffset);
+				OldPakArchive.Serialize(OldPakMemory.GetData(), Info.OldSize);
 
 				FPPakMemoryArchive PatchedMemory(Info.NewSize);
 				BinPatcher->Patch(PatchedMemory.GetData(), PatchedMemory.GetSize(),
@@ -678,8 +684,8 @@ bool FPPakPatcher::CheckPakDiff(const FPPakFileDataPtr& InNewPak, const FPPakFil
 	// check index block
 	{
 		FPPakPatchDataInfo& Info = InPatch->Info.IndexPatchInfo;
-		int64 StartOffset = NewPakReader.Tell();
-		if (!CheckReaderPaddingToOffset(NewPakReader, Info.NewOffset))
+		int64 StartOffset = NewPakArchive.Tell();
+		if (!CheckReaderPaddingToOffset(NewPakArchive, Info.NewOffset))
 		{
 			UE_LOG(LogPPakPacher, Error, TEXT("FPPakPatcher::CheckPakDiff - Check pak index block failed.. Offset:%lld, Size:%lld"), StartOffset, Info.NewOffset - StartOffset);
 			return false;
@@ -706,8 +712,8 @@ bool FPPakPatcher::CheckPakDiff(const FPPakFileDataPtr& InNewPak, const FPPakFil
 	// check path block
 	{
 		FPPakPatchDataInfo& Info = InPatch->Info.PathPatchInfo;
-		int64 StartOffset = NewPakReader.Tell();
-		if (!CheckReaderPaddingToOffset(NewPakReader, Info.NewOffset))
+		int64 StartOffset = NewPakArchive.Tell();
+		if (!CheckReaderPaddingToOffset(NewPakArchive, Info.NewOffset))
 		{
 			UE_LOG(LogPPakPacher, Error, TEXT("FPPakPatcher::CheckPakDiff - Check pak index block failed.. Offset:%lld, Size:%lld"), StartOffset, Info.NewOffset - StartOffset);
 			return false;
@@ -715,7 +721,7 @@ bool FPPakPatcher::CheckPakDiff(const FPPakFileDataPtr& InNewPak, const FPPakFil
 
 		const FPakInfo& NewPakInfo = NewPakFile.GetInfo();
 		int64 Offset = NewPakInfo.IndexOffset + NewPakInfo.IndexSize;
-		int64 End = NewPakReader.TotalSize() - NewPakInfo.GetSerializedSize(NewPakInfo.Version) - 1;
+		int64 End = NewPakArchive.TotalSize() - NewPakInfo.GetSerializedSize(NewPakInfo.Version) - 1;
 		int64 Size = End - Offset + 1;
 
 		if (Offset != Info.NewOffset ||
@@ -736,8 +742,8 @@ bool FPPakPatcher::CheckPakDiff(const FPPakFileDataPtr& InNewPak, const FPPakFil
 	// check head block
 	{
 		FPPakPatchDataInfo& Info = InPatch->Info.HeadPatchInfo;
-		int64 StartOffset = NewPakReader.Tell();
-		if (!CheckReaderPaddingToOffset(NewPakReader, Info.NewOffset))
+		int64 StartOffset = NewPakArchive.Tell();
+		if (!CheckReaderPaddingToOffset(NewPakArchive, Info.NewOffset))
 		{
 			UE_LOG(LogPPakPacher, Error, TEXT("FPPakPatcher::CheckPakDiff - Check pak index block failed.. Offset:%lld, Size:%lld"), StartOffset, Info.NewOffset - StartOffset);
 			return false;
@@ -745,7 +751,7 @@ bool FPPakPatcher::CheckPakDiff(const FPPakFileDataPtr& InNewPak, const FPPakFil
 
 		const FPakInfo& NewPakInfo = NewPakFile.GetInfo();
 		int64 Size = NewPakInfo.GetSerializedSize(NewPakInfo.Version);
-		int64 Offset = NewPakReader.TotalSize() - Size;
+		int64 Offset = NewPakArchive.TotalSize() - Size;
 
 		if (Offset != Info.NewOffset ||
 			Size != Info.NewSize)

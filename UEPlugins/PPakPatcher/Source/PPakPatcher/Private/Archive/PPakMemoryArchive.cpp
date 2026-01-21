@@ -1,6 +1,6 @@
 #include "Archive/PPakMemoryArchive.h"
 #include "Data/PPakFileData.h"
-#include "Data/PPakPacherDataType.h"
+#include "Data/PPakPatcherDataType.h"
 
 #include "Logging/LogMacros.h"
 #include "CoreGlobals.h"

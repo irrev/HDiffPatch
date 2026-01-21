@@ -1,7 +1,15 @@
-#include "Data/PPakPacherDataType.h"
+#include "Data/PPakPatcherDataType.h"
 
 DEFINE_LOG_CATEGORY(LogPPakPacher);
 
+
+#if ENGINE_MAJOR_VERSION >= 5
+#define PAKPATCHER_DEFINE_ENUM_TO_STRING(EnumType)\
+FString FPPakPatcherEnumHelper::ToString(EnumType InEnumValue)\
+{\
+	return UEnum::GetValueAsString(InEnumValue);\
+}
+#else
 #define PAKPATCHER_DEFINE_ENUM_TO_STRING(EnumType)\
 FString FPPakPatcherEnumHelper::ToString(EnumType InEnumValue)\
 {\
@@ -10,10 +18,11 @@ FString FPPakPatcherEnumHelper::ToString(EnumType InEnumValue)\
 \
 	return EnumPtr->GetNameStringByIndex((int32)InEnumValue);\
 }
+#endif
 PAKPATCHER_DEFINE_ENUM_TO_STRING(EPPatchDataSourceType)
 PAKPATCHER_DEFINE_ENUM_TO_STRING(EPakFilePatchType)
 #undef PAKPATCHER_DEFINE_ENUM_TO_STRING
 
-UPPakPacherDataType::UPPakPacherDataType(const FObjectInitializer& ObjInit)
+UPPakPatcherDataType::UPPakPatcherDataType(const FObjectInitializer& ObjInit)
 {
 }

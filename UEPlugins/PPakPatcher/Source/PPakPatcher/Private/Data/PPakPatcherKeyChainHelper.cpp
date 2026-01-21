@@ -1,11 +1,12 @@
 #include "Data/PPakPatcherKeyChainHelper.h"
-#include "Data/PPakPacherDataType.h"
+#include "Data/PPakPatcherDataType.h"
 
 #include "Misc/LazySingleton.h"
 #include "Misc/IEngineCrypto.h"
 #include "Misc/KeyChainUtilities.h"
 #include "Misc/ConfigCacheIni.h"
 #include "Misc/Base64.h"
+#include "Misc/CommandLine.h"
 #include "RSA.h"
 
 #include "HAL/FileManager.h"
@@ -25,23 +26,22 @@ FKeyChain& FPPakPatcherKeyChainHelper::GetKeyChain(bool bForceReload)
 bool FPPakPatcherKeyChainHelper::Signed()
 {
 	//Signed if we have keys, and are not running with fileopenlog (currently results in a deadlock).
-	return KeyChain.SigningKey != InvalidRSAKeyHandle && !FParse::Param(FCommandLine::Get(), TEXT("fileopenlog"));
+	return KeyChain.GetSigningKey() != InvalidRSAKeyHandle && !FParse::Param(FCommandLine::Get(), TEXT("fileopenlog"));
 }
 
 bool FPPakPatcherKeyChainHelper::HasEncryptionKey()
 {
-	return KeyChain.EncryptionKeys.Num() > 0;
+	return KeyChain.GetEncryptionKeys().Num() > 0;
 }
+
 
 void FPPakPatcherKeyChainHelper::LoadKeyChain(bool bForceReload)
 {
 	if (bLoadOnce || bForceReload)
 	{
 		bLoadOnce = false;
-
-		KeyChain.SigningKey = InvalidRSAKeyHandle;
-		KeyChain.EncryptionKeys.Empty();
-
+		KeyChain = FKeyChain();
+		
 #if WITH_EDITOR || IS_PROGRAM
 		LoadKeyChainInEditor();
 #else
@@ -79,9 +79,10 @@ void FPPakPatcherKeyChainHelper::LoadKeyChainInEditor()
 		{
 			FGuid::Parse(EncryptionKeyOverrideGuidString, EncryptionKeyOverrideGuid);
 		}
-		KeyChain.MasterEncryptionKey = KeyChain.EncryptionKeys.Find(EncryptionKeyOverrideGuid);
+		KeyChain.SetPrincipalEncryptionKey(KeyChain.GetEncryptionKeys().Find(EncryptionKeyOverrideGuid));
 	}
 }
+
 
 bool FPPakPatcherKeyChainHelper::LoadKeyChainFromFile()
 {
@@ -166,9 +167,10 @@ bool FPPakPatcherKeyChainHelper::LoadKeyChainFromEngineIni()
 				FBase64::Decode(PrivateExpBase64, PrivateExp);
 				FBase64::Decode(ModulusBase64, Modulus);
 
-				KeyChain.SigningKey = FRSA::CreateKey(PublicExp, PrivateExp, Modulus);
+				KeyChain.SetSigningKey(FRSA::CreateKey(PublicExp, PrivateExp, Modulus));
 
 				UE_LOG(LogPPakPacher, Display, TEXT("Parsed signature keys from config files."));
+
 			}
 
 			if (bEncryptPak)
@@ -185,9 +187,10 @@ bool FPPakPatcherKeyChainHelper::LoadKeyChainFromEngineIni()
 					NewKey.Name = TEXT("Default");
 					NewKey.Guid = FGuid();
 					FMemory::Memcpy(NewKey.Key.Key, &Key[0], sizeof(FAES::FAESKey::Key));
-					KeyChain.EncryptionKeys.Add(NewKey.Guid, NewKey);
+					KeyChain.GetEncryptionKeys().Add(NewKey.Guid, NewKey);
 					UE_LOG(LogPPakPacher, Display, TEXT("Parsed AES encryption key from config files."));
 				}
+
 			}
 		}
 		else
@@ -229,10 +232,11 @@ bool FPPakPatcherKeyChainHelper::LoadKeyChainFromEngineIni()
 					{
 						NewKey.Key.Key[Index] = (uint8)EncryptionKeyString[Index];
 					}
-					KeyChain.EncryptionKeys.Add(NewKey.Guid, NewKey);
+					KeyChain.GetEncryptionKeys().Add(NewKey.Guid, NewKey);
 					UE_LOG(LogPPakPacher, Display, TEXT("Parsed AES encryption key from config files."));
 				}
 			}
+
 		}
 	}
 	return false;
@@ -279,10 +283,11 @@ bool FPPakPatcherKeyChainHelper::LoadKeyChainFromCommandline()
 		ANSICHAR* AsAnsi = TCHAR_TO_ANSI(*EncryptionKeyString);
 		check(TCString<ANSICHAR>::Strlen(AsAnsi) == RequiredKeyLength);
 		FMemory::Memcpy(NewKey.Key.Key, AsAnsi, RequiredKeyLength);
-		KeyChain.EncryptionKeys.Add(NewKey.Guid, NewKey);
+		KeyChain.GetEncryptionKeys().Add(NewKey.Guid, NewKey);
 		UE_LOG(LogPPakPacher, Display, TEXT("Parsed AES encryption key from command line."));
 		return true;
 	}
+
 	return false;
 }
 
@@ -297,18 +302,18 @@ void FPPakPatcherKeyChainHelper::LoadKeyChainInGame()
 		TArray<uint8> Exponent;
 		TArray<uint8> Modulus;
 		FCoreDelegates::GetPakSigningKeysDelegate().Execute(Exponent, Modulus);
-		KeyChain.SigningKey = FRSA::CreateKey(Exponent, TArray<uint8>(), Modulus);
+		KeyChain.SetSigningKey(FRSA::CreateKey(Exponent, TArray<uint8>(), Modulus));
 	}
 
 	// encrypt key
-	if (FCoreDelegates::GetPakSigningKeysDelegate().IsBound())
+	if (FCoreDelegates::GetPakEncryptionKeyDelegate().IsBound())
 	{
 		FGuid Guid;
-		FNamedAESKey& NamedAESKey = KeyChain.EncryptionKeys.FindOrAdd(Guid);
+		FNamedAESKey& NamedAESKey = KeyChain.GetEncryptionKeys().FindOrAdd(Guid);
 		NamedAESKey.Guid = Guid;
 		NamedAESKey.Name = TEXT("Embedded");
 		FCoreDelegates::GetPakEncryptionKeyDelegate().Execute(NamedAESKey.Key.Key);
-		KeyChain.MasterEncryptionKey = &NamedAESKey;
+		KeyChain.SetPrincipalEncryptionKey(&NamedAESKey);
 	}
 
 	return;

@@ -26,8 +26,9 @@ bool FPHDiffPatcher::CreateDiff(const TArray<uint8>& InNew, const TArray<uint8>&
 	OutDiff.SetNumUninitialized(StdTmp.size());
 	FMemory::Memcpy(OutDiff.GetData(), StdTmp.data(), StdTmp.size());
 	return true;
-#endif
+#else
 	return false;
+#endif
 }
 
 bool FPHDiffPatcher::CreateDiff(uint8* InNew, uint64 InNewSize, uint8* InOld, uint64 InOldSize, TArray<uint8>& OutDiff)
@@ -42,8 +43,9 @@ bool FPHDiffPatcher::CreateDiff(uint8* InNew, uint64 InNewSize, uint8* InOld, ui
 	OutDiff.SetNumUninitialized(StdTmp.size());
 	FMemory::Memcpy(OutDiff.GetData(), StdTmp.data(), StdTmp.size());
 	return true;
-#endif
+#else
 	return false;
+#endif
 }
 
 bool FPHDiffPatcher::CheckDiff(const TArray<uint8>& InNew, const TArray<uint8>& InOld, const TArray<uint8>& InDiff)
@@ -53,8 +55,9 @@ bool FPHDiffPatcher::CheckDiff(const TArray<uint8>& InNew, const TArray<uint8>& 
 		InNew.GetData(), InNew.GetData() + InNew.Num(),
 		InOld.GetData(), InOld.GetData() + InOld.Num(),
 		InDiff.GetData(), InDiff.GetData() + InDiff.Num());
-#endif
+#else
 	return false;
+#endif
 }
 
 bool FPHDiffPatcher::CheckDiff(uint8* InNew, uint64 InNewSize, uint8* InOld, uint64 InOldSize, uint8* InDiff, uint64 InDiffSize)
@@ -64,8 +67,9 @@ bool FPHDiffPatcher::CheckDiff(uint8* InNew, uint64 InNewSize, uint8* InOld, uin
 		InNew, InNew + InNewSize,
 		InOld, InOld + InOldSize,
 		InDiff, InDiff + InDiffSize);
-#endif
+#else
 	return false;
+#endif
 }
 
 bool FPHDiffPatcher::Patch(TArray<uint8>& OutNew, const TArray<uint8>& InOld, const TArray<uint8>& InDiff)
@@ -74,8 +78,9 @@ bool FPHDiffPatcher::Patch(TArray<uint8>& OutNew, const TArray<uint8>& InOld, co
 	return HDiffPatch::Patch(OutNew.GetData(), OutNew.GetData() + OutNew.Num(),
 		InOld.GetData(), InOld.GetData() + InOld.Num(),
 		InDiff.GetData(), InDiff.GetData() + InDiff.Num());
-#endif
+#else
 	return false;
+#endif
 }
 
 bool FPHDiffPatcher::Patch(uint8* InNew, uint64 InNewSize, uint8* InOld, uint64 InOldSize, uint8* InDiff, uint64 InDiffSize)
@@ -84,6 +89,7 @@ bool FPHDiffPatcher::Patch(uint8* InNew, uint64 InNewSize, uint8* InOld, uint64 
 	return HDiffPatch::Patch(InNew, InNew + InNewSize,
 		InOld, InOld + InOldSize,
 		InDiff, InDiff + InDiffSize);
-#endif
+#else
 	return false;
+#endif
 }

@@ -1,5 +1,5 @@
 #include "Data/PPakPatchData.h"
-#include "Data/PPakPacherDataType.h"
+#include "Data/PPakPatcherDataType.h"
 #include "PPakPatcherSettings.h"
 #include "Data/PPakFileData.h"
 
@@ -528,7 +528,6 @@ bool FPPakPatchData::RecordData(const uint8* InSource, const int64 InSize, FPPak
 		Writer->Serialize(const_cast<uint8*>(InSource), InSize);
 		return true;
 	}
-	return false;
 }
 
 bool FPPakPatchData::FinalizeWriteFile()
