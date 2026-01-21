@@ -107,9 +107,9 @@ if(HDIFFPATCH_USE_LZMA)
             "${LZMA_DIR}/LzFindMt.c" "${LZMA_DIR}/MtCoder.c"
         )
     else()
-        # 明确添加 _7ZIP_ST 定义，确保单线程模式生效
-        add_definitions(-D_7ZIP_ST)
-        list(APPEND DEP_DEFINITIONS "_7ZIP_ST")
+        # 明确添加 _7ZIP_ST 和 Z7_ST 定义，确保单线程模式生效
+        add_definitions(-D_7ZIP_ST -DZ7_ST)
+        list(APPEND DEP_DEFINITIONS "_7ZIP_ST" "Z7_ST")
     endif()
     list(APPEND DEP_SOURCES ${LZMA_SRCS})
 endif()
@@ -175,6 +175,8 @@ if(HDIFFPATCH_MT)
     file(GLOB_RECURSE libParallel "../libParallel/*")
 else()
     set(libParallel "")
+    # 排除 hpatch_mt 目录下的文件
+    list(FILTER libHDiffPatch EXCLUDE REGEX ".*hpatch_mt.*")
 endif()
 
 # 搜集源文件
