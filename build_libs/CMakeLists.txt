@@ -64,8 +64,15 @@ endif()
 
 # ZLIB
 if(HDIFFPATCH_USE_ZLIB)
-    file(GLOB ZLIB_SRCS "${ZLIB_DIR}/*.c")
-    list(FILTER ZLIB_SRCS EXCLUDE REGEX ".*gz.*\\.c$")
+    set(ZLIB_CORE_NAMES 
+        adler32.c compress.c crc32.c deflate.c infback.c inffast.c inflate.c 
+        inftrees.c trees.c uncompr.c zutil.c
+    )
+    set(ZLIB_SRCS "")
+    foreach(NAME ${ZLIB_CORE_NAMES})
+        list(APPEND ZLIB_SRCS "${ZLIB_DIR}/${NAME}")
+    endforeach()
+    
     list(APPEND DEP_SOURCES ${ZLIB_SRCS})
     list(APPEND DEP_INCLUDES "${ZLIB_DIR}")
     list(APPEND DEP_DEFINITIONS "_CompressPlugin_zlib" "_ChecksumPlugin_crc32")
@@ -100,6 +107,8 @@ if(HDIFFPATCH_USE_LZMA)
             "${LZMA_DIR}/LzFindMt.c" "${LZMA_DIR}/MtCoder.c"
         )
     else()
+        # 明确添加 _7ZIP_ST 定义，确保单线程模式生效
+        add_definitions(-D_7ZIP_ST)
         list(APPEND DEP_DEFINITIONS "_7ZIP_ST")
     endif()
     list(APPEND DEP_SOURCES ${LZMA_SRCS})
