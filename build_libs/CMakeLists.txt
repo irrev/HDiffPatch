@@ -33,7 +33,7 @@ option(HDIFFPATCH_USE_ZSTD "Enable zstd" ON)
 option(HDIFFPATCH_USE_LDEF "Enable libdeflate" OFF)
 option(HDIFFPATCH_USE_MD5 "Enable md5" OFF)
 option(HDIFFPATCH_USE_XXH "Enable xxHash" OFF)
-option(HDIFFPATCH_MT "Enable multithreading" OFF)
+option(HDIFFPATCH_MT "Enable multithreading" ON)
 
 # Library Paths
 set(ZLIB_DIR "../../zlib")
