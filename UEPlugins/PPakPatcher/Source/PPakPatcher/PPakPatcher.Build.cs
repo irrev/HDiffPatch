@@ -88,9 +88,7 @@ public class PPakPatcher : ModuleRules
 		// add HDiffPatch third party
 		if(bEnableHDiffPatch)
 		{
-			bool bUseStaticLib =
-				Target.Platform == UnrealTargetPlatform.Win64 ||
-				Target.Platform == UnrealTargetPlatform.Win32;
+			bool bUseStaticLib = Target.Platform == UnrealTargetPlatform.Win64;
 
 			PublicDefinitions.Add(String.Format("HDIFFPATCH_STATIC_LIB={0}", bUseStaticLib ? "1" : "0"));
 
@@ -111,21 +109,6 @@ public class PPakPatcher : ModuleRules
 				else
 				{
 					string DllPath = Path.Combine(SharedPath, "windows", "x64", "HDiffPatchShared.dll");
-					//PublicDelayLoadDLLs.Add(DllPath);
-					RuntimeDependencies.Add(Path.Combine("$(TargetOutputDir)", "HDiffPatch.dll"), DllPath);
-				}
-			}
-			else if (Target.Platform == UnrealTargetPlatform.Win32)
-			{
-				PublicDefinitions.Add("HDIFFPATCH_PLATFORM_WINDOWS=1");
-
-				if (bUseStaticLib)
-				{
-					PublicAdditionalLibraries.Add(Path.Combine(StaticPath, "windows", "x32", "HDiffPatch.lib"));
-				}
-				else
-				{
-					string DllPath = Path.Combine(SharedPath, "windows", "x32", "HDiffPatch.dll");
 					//PublicDelayLoadDLLs.Add(DllPath);
 					RuntimeDependencies.Add(Path.Combine("$(TargetOutputDir)", "HDiffPatch.dll"), DllPath);
 				}
