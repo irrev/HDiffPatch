@@ -64,7 +64,7 @@ endif()
 
 # ZLIB
 if(HDIFFPATCH_USE_ZLIB)
-    file(GLOB_RECURSE ZLIB_SRCS "${ZLIB_DIR}/*.c")
+    file(GLOB ZLIB_SRCS "${ZLIB_DIR}/*.c")
     list(APPEND DEP_SOURCES ${ZLIB_SRCS})
     list(APPEND DEP_INCLUDES "${ZLIB_DIR}")
     list(APPEND DEP_DEFINITIONS "_CompressPlugin_zlib" "_ChecksumPlugin_crc32")
@@ -72,7 +72,7 @@ endif()
 
 # BZIP2
 if(HDIFFPATCH_USE_BZIP2)
-    file(GLOB_RECURSE BZIP2_SRCS "${BZIP2_DIR}/*.c")
+    file(GLOB BZIP2_SRCS "${BZIP2_DIR}/*.c")
     list(APPEND DEP_SOURCES ${BZIP2_SRCS})
     list(APPEND DEP_INCLUDES "${BZIP2_DIR}")
     list(APPEND DEP_DEFINITIONS "_CompressPlugin_bz2")
