@@ -80,6 +80,7 @@ jobs:
         git clone https://github.com/sisong/zstd.git ../zstd
         git clone https://github.com/sisong/zlib.git ../zlib
         git clone https://github.com/sisong/libdeflate.git ../libdeflate
+        ls -R ../
 
     - name: Checkout Dependencies (Windows)
       if: startsWith(matrix.os, 'windows')

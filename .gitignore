@@ -21,3 +21,6 @@ builds/vc/ipch/
 *.opensdf
 *.sdf
 *.ipch
+.vs/
+*.user
+x64/
