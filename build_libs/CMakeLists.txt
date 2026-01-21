@@ -65,6 +65,7 @@ endif()
 # ZLIB
 if(HDIFFPATCH_USE_ZLIB)
     file(GLOB ZLIB_SRCS "${ZLIB_DIR}/*.c")
+    list(FILTER ZLIB_SRCS EXCLUDE REGEX ".*gz.*\\.c$")
     list(APPEND DEP_SOURCES ${ZLIB_SRCS})
     list(APPEND DEP_INCLUDES "${ZLIB_DIR}")
     list(APPEND DEP_DEFINITIONS "_CompressPlugin_zlib" "_ChecksumPlugin_crc32")
@@ -98,6 +99,8 @@ if(HDIFFPATCH_USE_LZMA)
             "${LZMA_DIR}/MtDec.c" "${LZMA_DIR}/Threads.c" 
             "${LZMA_DIR}/LzFindMt.c" "${LZMA_DIR}/MtCoder.c"
         )
+    else()
+        list(APPEND DEP_DEFINITIONS "_7ZIP_ST")
     endif()
     list(APPEND DEP_SOURCES ${LZMA_SRCS})
 endif()
