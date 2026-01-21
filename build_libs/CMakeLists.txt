@@ -35,6 +35,15 @@ option(HDIFFPATCH_USE_MD5 "Enable md5" OFF)
 option(HDIFFPATCH_USE_XXH "Enable xxHash" OFF)
 option(HDIFFPATCH_MT "Enable multithreading" OFF)
 
+# Library Paths
+set(ZLIB_DIR "../../zlib")
+set(BZIP2_DIR "../../bzip2")
+set(LZMA_DIR "../../lzma/C")
+set(ZSTD_DIR "../../zstd/lib")
+set(MD5_DIR "../../libmd5")
+set(XXH_DIR "../../xxHash")
+set(LDEF_DIR "../../libdeflate")
+
 set(DEP_SOURCES "")
 set(DEP_INCLUDES "")
 set(DEP_DEFINITIONS "")
@@ -55,23 +64,22 @@ endif()
 
 # ZLIB
 if(HDIFFPATCH_USE_ZLIB)
-    file(GLOB_RECURSE ZLIB_SRCS "../zlib/*.c")
+    file(GLOB_RECURSE ZLIB_SRCS "${ZLIB_DIR}/*.c")
     list(APPEND DEP_SOURCES ${ZLIB_SRCS})
-    list(APPEND DEP_INCLUDES "../zlib")
+    list(APPEND DEP_INCLUDES "${ZLIB_DIR}")
     list(APPEND DEP_DEFINITIONS "_CompressPlugin_zlib" "_ChecksumPlugin_crc32")
 endif()
 
 # BZIP2
 if(HDIFFPATCH_USE_BZIP2)
-    file(GLOB_RECURSE BZIP2_SRCS "../bzip2/*.c")
+    file(GLOB_RECURSE BZIP2_SRCS "${BZIP2_DIR}/*.c")
     list(APPEND DEP_SOURCES ${BZIP2_SRCS})
-    list(APPEND DEP_INCLUDES "../bzip2")
+    list(APPEND DEP_INCLUDES "${BZIP2_DIR}")
     list(APPEND DEP_DEFINITIONS "_CompressPlugin_bz2")
 endif()
 
 # LZMA
 if(HDIFFPATCH_USE_LZMA)
-    set(LZMA_DIR "../lzma/C")
     list(APPEND DEP_INCLUDES ${LZMA_DIR})
     list(APPEND DEP_DEFINITIONS "_CompressPlugin_lzma" "_CompressPlugin_lzma2" "_CompressPlugin_7zXZ")
     
@@ -96,7 +104,6 @@ endif()
 
 # ZSTD
 if(HDIFFPATCH_USE_ZSTD)
-    set(ZSTD_DIR "../zstd/lib")
     file(GLOB ZSTD_COMMON "${ZSTD_DIR}/common/*.c")
     file(GLOB ZSTD_COMPRESS "${ZSTD_DIR}/compress/*.c")
     file(GLOB ZSTD_DECOMPRESS "${ZSTD_DIR}/decompress/*.c")
@@ -116,20 +123,19 @@ endif()
 
 # MD5
 if(HDIFFPATCH_USE_MD5)
-    list(APPEND DEP_SOURCES "../libmd5/md5.c")
-    list(APPEND DEP_INCLUDES "../libmd5")
+    list(APPEND DEP_SOURCES "${MD5_DIR}/md5.c")
+    list(APPEND DEP_INCLUDES "${MD5_DIR}")
     list(APPEND DEP_DEFINITIONS "_ChecksumPlugin_md5")
 endif()
 
 # XXH
 if(HDIFFPATCH_USE_XXH)
-    list(APPEND DEP_INCLUDES "../xxHash")
+    list(APPEND DEP_INCLUDES "${XXH_DIR}")
     list(APPEND DEP_DEFINITIONS "_ChecksumPlugin_xxh3" "_ChecksumPlugin_xxh128")
 endif()
 
 # LDEF (LibDeflate)
 if(HDIFFPATCH_USE_LDEF)
-    set(LDEF_DIR "../libdeflate")
     list(APPEND DEP_INCLUDES ${LDEF_DIR})
     list(APPEND DEP_DEFINITIONS "_CompressPlugin_ldef")
     
