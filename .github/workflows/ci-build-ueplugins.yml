@@ -11,7 +11,7 @@ on:
     inputs:
       tag_date:
         description: 'tag date'     
-        required: true
+        required: false
 
 jobs:
   build:
