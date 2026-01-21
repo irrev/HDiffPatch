@@ -60,8 +60,8 @@ bool FPPakPatcher::CreatePakDiff(const FString& InPatchFilename, const FPPakFile
 	FArchive& NewPakArchive = NewPakReader.GetArchive();
 
 	FPakFile& OldPakFile = *InOldPak->PakFilePtr;
-    FSharedPakReader OldPakReader = OldPakFile.GetSharedReader(NULL);
-    FArchive& OldPakArchive = OldPakReader.GetArchive();
+	FSharedPakReader OldPakReader = OldPakFile.GetSharedReader(NULL);
+	FArchive& OldPakArchive = OldPakReader.GetArchive();
 
 	IPBinPatcher* BinPatcher = IPPakPatcherModule::Get().GetBinPatcher();
 
@@ -325,7 +325,7 @@ bool FPPakPatcher::PatchPak(const FString& InNewPakFilename, const FPPakFileData
 	IPBinPatcher* BinPatcher = IPPakPatcherModule::Get().GetBinPatcher();
 	FPakFile& OldPakFile = *InOldPak->PakFilePtr;
 	FSharedPakReader OldPakReader = OldPakFile.GetSharedReader(NULL);
-    FArchive& OldPakArchive = OldPakReader.GetArchive();
+	FArchive& OldPakArchive = OldPakReader.GetArchive();
 
 	FKeyChain& KeyChain = FPPakPatcherKeyChainHelper::Get().GetKeyChain();
 	bool bSign = InPatch->Info.bSign;
@@ -501,11 +501,11 @@ bool FPPakPatcher::CheckPakDiff(const FPPakFileDataPtr& InNewPak, const FPPakFil
 
 	FPakFile& NewPakFile = *InNewPak->PakFilePtr;
 	FSharedPakReader NewPakReader = NewPakFile.GetSharedReader(NULL);
-    FArchive& NewPakArchive = NewPakReader.GetArchive();
+	FArchive& NewPakArchive = NewPakReader.GetArchive();
 
 	FPakFile& OldPakFile = *InOldPak->PakFilePtr;
-    FSharedPakReader OldPakReader = OldPakFile.GetSharedReader(NULL);
-    FArchive& OldPakArchive = OldPakReader.GetArchive();
+	FSharedPakReader OldPakReader = OldPakFile.GetSharedReader(NULL);
+	FArchive& OldPakArchive = OldPakReader.GetArchive();
 
 	IPBinPatcher* BinPatcher = IPPakPatcherModule::Get().GetBinPatcher();
 
