@@ -112,10 +112,18 @@ namespace HDiffPatch
 	bool CheckSingleCompressedDiff(const unsigned char* newData, const unsigned char* newData_end,
 		const unsigned char* oldData, const unsigned char* oldData_end,
 		const unsigned char* diff, const unsigned char* diff_end,
-		HDiffCompressionType compressType /*= HDIFF_COMPRESSION_NONE*/,
 		size_t threadNum /*= 1*/)
 	{
-		hpatch_TDecompress* decompressPlugin = _getDecompressPlugin(compressType);
+
+		SingleCompressedDiffInfo info;
+		if (!GetSingleCompressedDiffInfo(diff, diff_end, &info)) return false;
+
+		hpatch_TDecompress* decompressPlugin = 0;
+		if (strlen(info.compressType) > 0) {
+			decompressPlugin = _getDecompressPluginByStr(info.compressType);
+			if (!decompressPlugin) return false;
+		}
+
 		return check_single_compressed_diff(newData, newData_end, oldData, oldData_end, diff, diff_end, decompressPlugin, threadNum);
 	}
 
@@ -223,51 +231,5 @@ namespace HDiffPatch
 
 		return patch_single_stream_mem(&listener, out_newData, out_newData_end,
 			oldData, oldData_end, diff, diff_end, 0, threadNum) == hpatch_TRUE;
-	}
-
-	void CreatePatch(const unsigned char* oldData, const unsigned char* oldData_end,
-		const unsigned char* newData, const unsigned char* newData_end,
-		std::vector<unsigned char>& out_patch,
-		HDiffCompressionType compressType,
-		int kMinSingleMatchScore,
-		size_t threadNum)
-	{
-		CreateSingleCompressedDiff(newData, newData_end, oldData, oldData_end, out_patch, compressType, kMinSingleMatchScore, 1024 * 256, false, threadNum);
-	}
-
-	bool ApplyPatch(const unsigned char* oldData, const unsigned char* oldData_end,
-		const unsigned char* patch, const unsigned char* patch_end,
-		std::vector<unsigned char>& out_newData,
-		size_t threadNum)
-	{
-		SingleCompressedDiffInfo info;
-		if (!GetSingleCompressedDiffInfo(patch, patch_end, &info)) return false;
-
-		try {
-			out_newData.resize((size_t)info.newDataSize);
-		}
-		catch (...) {
-			return false;
-		}
-
-		return PatchSingleCompressedDiff(out_newData.data(), out_newData.data() + out_newData.size(),
-			oldData, oldData_end, patch, patch_end, &info, threadNum);
-	}
-
-	bool CheckPatch(const unsigned char* oldData, const unsigned char* oldData_end,
-		const unsigned char* newData, const unsigned char* newData_end,
-		const unsigned char* patch, const unsigned char* patch_end,
-		size_t threadNum)
-	{
-		SingleCompressedDiffInfo info;
-		if (!GetSingleCompressedDiffInfo(patch, patch_end, &info)) return false;
-
-		hpatch_TDecompress* decompressPlugin = 0;
-		if (strlen(info.compressType) > 0) {
-			decompressPlugin = _getDecompressPluginByStr(info.compressType);
-			if (!decompressPlugin) return false;
-		}
-
-		return check_single_compressed_diff(newData, newData_end, oldData, oldData_end, patch, patch_end, decompressPlugin, threadNum);
 	}
 };

@@ -132,7 +132,6 @@ namespace HDiffPatch
 	HDIFFPATCH_API bool CheckSingleCompressedDiff(const unsigned char* newData, const unsigned char* newData_end,
 		const unsigned char* oldData, const unsigned char* oldData_end,
 		const unsigned char* diff, const unsigned char* diff_end,
-		HDiffCompressionType compressType = HDIFF_COMPRESSION_NONE,
 		size_t threadNum = 1);
 #endif //HDIFFPATCH_ENABLE_DIFF
 
@@ -159,32 +158,4 @@ namespace HDiffPatch
 		const unsigned char* oldData, const unsigned char* oldData_end,
 		const unsigned char* diff, const unsigned char* diff_end,
 		size_t threadNum = 1);
-
-	// ================================================================
-	// Easy API wrappers
-	// ================================================================
-
-	// Create a patch (compressed diff)
-	// This is a wrapper for CreateSingleCompressedDiff
-	HDIFFPATCH_API void CreatePatch(const unsigned char* oldData, const unsigned char* oldData_end,
-		const unsigned char* newData, const unsigned char* newData_end,
-		std::vector<unsigned char>& out_patch,
-		HDiffCompressionType compressType = HDIFF_COMPRESSION_ZSTD,
-		int kMinSingleMatchScore = _kMinSingleMatchScore_default,
-		size_t threadNum = 1);
-
-	// Apply a patch
-	// This is a wrapper that automatically handles GetSingleCompressedDiffInfo and memory allocation
-	HDIFFPATCH_API bool ApplyPatch(const unsigned char* oldData, const unsigned char* oldData_end,
-		const unsigned char* patch, const unsigned char* patch_end,
-		std::vector<unsigned char>& out_newData,
-		size_t threadNum = 1);
-
-	// Check a patch
-	// This is a wrapper that automatically detects compression type
-	HDIFFPATCH_API bool CheckPatch(const unsigned char* oldData, const unsigned char* oldData_end,
-		const unsigned char* newData, const unsigned char* newData_end,
-		const unsigned char* patch, const unsigned char* patch_end,
-		size_t threadNum = 1);
-
 };
