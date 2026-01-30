@@ -12,6 +12,11 @@ on:
       tag_date:
         description: 'tag date'     
         required: false
+      overwrite:
+        description: 'overwrite existing release'
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   build:
@@ -282,23 +287,14 @@ jobs:
           cd result
           zip -r ../UEPlugins-PakPatcher.zip UEPlugins
 
-      #- name: Delete the current release
-      #  run: |
-      #    curl -X DELETE -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" "https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ env.RELEASE_TAG }}"
-      #  continue-on-error: true # 在此步骤失败时继续执行工作流程
+      - name: Delete existing release and tag
+        if: ${{ github.event.inputs.overwrite == 'true' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release delete ${{ env.RELEASE_TAG }} --cleanup-tag --yes || true
 
-      #- name: Delete the current release
-      #  uses: liudonghua123/delete-release-action@v1
-      #  continue-on-error: true # 添加这一行
-      #  env:
-      #    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      #  with:
-      #    release_name: ${{ env.RELEASE_TAG }}
-      #    suppress_errors: true
-      #    token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Create a new release
-        id: create_release
+      - name: Create a new release        id: create_release
         uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
