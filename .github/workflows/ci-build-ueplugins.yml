@@ -294,7 +294,8 @@ jobs:
         run: |
           gh release delete ${{ env.RELEASE_TAG }} --cleanup-tag --yes || true
 
-      - name: Create a new release        id: create_release
+      - name: Create a new release
+        id: create_release
         uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
