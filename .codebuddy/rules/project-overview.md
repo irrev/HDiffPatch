@@ -1,0 +1,73 @@
+# 项目背景（AI 上下文）
+
+## 1. 身份
+
+- 仓库类型：**Fork**
+- 上游：https://github.com/sisong/HDiffPatch
+- 上游功能：二进制文件/目录之间的 diff（生成补丁）与 patch（应用补丁），C/C++ 库 + CLI。
+- 本 fork 目标：**包装为跨平台 UE 插件 PPakPatcher**，用于游戏 Pak 资产增量更新。
+
+## 2. 最终目标（严格按此对齐回答方向）
+
+1. 将 `PPakPatcher` 集成进 UE 游戏项目。
+2. **构建机** 上调用 UE Commandlet（`PPakPatcherCommandlet`）：输入新旧两版资产，产出补丁文件。
+3. **玩家运行时** 使用补丁，对老资产打补丁得到新资产。
+
+## 3. 非目标（AI 请勿主动扩展到这些方向）
+
+- **不处理补丁分发 / 下载 / CDN**。这些是上层业务，插件只负责 diff 与 patch 计算。
+- **不处理文件元数据**（权限、修改时间、软链接等）。文件被视为字节流。
+- **不处理签名加密**。如需要由上层业务自行集成。
+- **不引入额外的 UE 第三方插件依赖**（UE 核心 `Core/CoreUObject/Engine` 之外，尽量避免）。
+- **不重写上游 HDiffPatch 算法**。如需改算法，请优先反馈给上游。
+
+## 4. 与上游的边界
+
+| 内容 | 归属 | AI 是否可修改 |
+| ---- | ---- | ------------- |
+| `libHDiffPatch/`、`libhsync/`、`libParallel/`、`dirDiffPatch/`、`bsdiff_wrapper/`、`vcdiff_wrapper/` | 上游 | **最小化修改**（见下方说明） |
+| `hdiffz.cpp`、`hpatchz.c`、`file_for_patch.*`、根目录 `_*.h` | 上游 CLI / 内部工具 | **最小化修改** |
+| `README.md`、`README_cn.md`、`CHANGELOG.md`、`LICENSE` | 上游 | **否**（fork 专属说明写到 `docs/`） |
+| `builds/`（VS / Xcode / Make 工程） | 上游 | **最小化修改**（本 fork 不产出 CLI，通常无需改） |
+| `build_libs/` | 本 fork 新增 | 是 |
+| `UEPlugins/PPakPatcher/` | 本 fork 新增 | 是 |
+| `.github/workflows/ci-build-ueplugins.yml` | 本 fork 新增 | 是 |
+| `docs/`、`CODEBUDDY.md`、`.codebuddy/` | 本 fork 新增 | 是 |
+
+**"最小化修改"的含义**：
+
+- 默认不动上游文件；**优先**通过 Layer 2 封装、宏开关、接口扩展等方式规避问题。
+- 只有在以下情况允许修改上游：
+  1. 明确的 bug（并优先考虑是否应该上报上游修复）；
+  2. 新平台适配必须在 Layer 1 加宏分支（例如 HarmonyOS / OHOS 的 `_IS_XXX` 开关）；
+  3. 安全问题；
+  4. 第三方库 API 变动导致编译失败。
+- 修改必须：
+  - **范围最小**：只改真正必要的行，不要顺手格式化或重构；
+  - **打标记**：每处改动加注释 `// [fork-patch] <简短原因>`，便于将来 merge upstream 时快速识别冲突；
+  - **可独立回溯**：建议单独成 commit，commit message 以 `upstream-patch:` 开头；
+  - **在 PR 中声明**：勾选"影响 Layer 1"并解释。
+
+## 5. 支持平台矩阵
+
+### 5.1 当前已支持（由 CI 矩阵决定，是事实依据）
+
+Windows(x64, x86)、Android(arm64, armeabi, x86, x86_64)、Linux(arm, x86, x64)、macOS、iOS —— 共 **11** 个。
+
+### 5.2 规划中（尚未在 CI 出现）
+
+- **HarmonyOS（纯血鸿蒙 / OHOS）** —— 下一个要加入的平台。
+  - 编译器：OHOS NDK（基于 clang）
+  - 目标架构：通常至少包含 `arm64-v8a`（后续可扩 `armeabi-v7a`、`x86_64`）
+  - 关键待办：
+    1. `build_libs/CMakePresets.json` 新增 `harmonyos-arm64` 等预设（参考 `android-*` 的思路）；
+    2. `build_libs/CMakeLists.txt` 新增 `elseif(OHOS) ... HDIFFPATCH_PLATFORM_HARMONYOS ...` 分支；
+    3. 上游代码若有 POSIX / Android 特殊分支，可能需在 Layer 1 最小化加 `#if` 分支（遵循 §4 "最小化修改"规则）；
+    4. `.github/workflows/ci-build-ueplugins.yml` matrix 与 `copy_lib` 段增加对应项；
+    5. `UEPlugins/PPakPatcher/Source/PPakPatcher/PPakPatcher.Build.cs` 需支持 UE 的鸿蒙 Target（如该版本 UE 已支持）；
+    6. 文档同步：`docs/architecture.md`、`docs/ci-pipeline.md`、`docs/build-libs.md` 的平台表。
+
+> 当用户询问"是否支持 XXX 平台"时：
+> - 命中 §5.1 列表 → 回答已支持；
+> - 命中 §5.2 → 回答"规划中，未在 CI 验证"；
+> - 其他 → 回答"当前未规划"，**不要虚构支持情况**。
