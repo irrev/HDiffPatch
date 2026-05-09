@@ -88,10 +88,69 @@ def ensure_third_party(extra_for_windows: bool = False) -> None:
 
 
 def find_cmake() -> str:
+    """查找 cmake.exe / cmake，优先 PATH，其次 DevEco Studio 内置。"""
     exe = shutil.which("cmake")
-    if not exe:
-        die("`cmake` not found in PATH. Please install CMake >= 3.23.5.")
-    return exe
+    if exe:
+        return exe
+    # DevEco Studio 在 Win/macOS 上自带 CMake
+    fallback = _deveco_buildtool("cmake")
+    if fallback:
+        info(f"using bundled CMake from DevEco Studio: {fallback}")
+        return fallback
+    die("`cmake` not found in PATH and not bundled with DevEco Studio. "
+        "Please install CMake >= 3.23.5 (https://cmake.org/download/) "
+        "or install DevEco Studio 6+ (which bundles CMake).")
+    return ""  # unreachable
+
+
+def find_ninja() -> str | None:
+    """查找 ninja.exe / ninja，优先 PATH，其次 DevEco Studio 内置。
+    返回 None 表示未找到（仅在使用 Ninja generator 的 preset 上才需要）。
+    """
+    exe = shutil.which("ninja")
+    if exe:
+        return exe
+    fallback = _deveco_buildtool("ninja")
+    if fallback:
+        info(f"using bundled Ninja from DevEco Studio: {fallback}")
+        return fallback
+    return None
+
+
+def _deveco_buildtool(name: str) -> str | None:
+    """从 DevEco Studio 内置工具链中查找指定的可执行文件（cmake / ninja）。
+
+    探测路径优先级：
+      1) $DEVECO_PATH/sdk/default/openharmony/native/build-tools/cmake/bin/<name>
+      2) $DEVECO_PATH/sdk/default/hms/native/build-tools/cmake/bin/<name>
+      3) 各 OS 默认 DevEco Studio 安装路径
+    """
+    exe_name = f"{name}.exe" if host_os() == "windows" else name
+
+    deveco_roots: list[Path] = []
+    deveco_env = os.environ.get("DEVECO_PATH")
+    if deveco_env:
+        deveco_roots.append(Path(deveco_env))
+
+    sysname = host_os()
+    if sysname == "windows":
+        deveco_roots.append(Path(r"C:\Program Files\Huawei\DevEco Studio"))
+    elif sysname == "macos":
+        deveco_roots.append(Path("/Applications/DevEco-Studio.app/Contents"))
+
+    sub_paths = [
+        Path("sdk") / "default" / "openharmony" / "native" / "build-tools" / "cmake" / "bin",
+        Path("sdk") / "default" / "hms"         / "native" / "build-tools" / "cmake" / "bin",
+    ]
+
+    for root in deveco_roots:
+        if not root.is_dir():
+            continue
+        for sub in sub_paths:
+            candidate = root / sub / exe_name
+            if candidate.is_file():
+                return str(candidate)
+    return None
 
 
 def host_os() -> str:
@@ -145,7 +204,17 @@ class LocalBuilder:
             "-S", str(BUILD_LIBS_DIR),
             "-B", str(build_dir),
             f"--preset={task.preset}",
-        ] + list(task.extra_cmake_args)
+        ]
+
+        # 若 PATH 没有 ninja，但 DevEco Studio 自带，则注入给 CMake，避免
+        # "CMake was unable to find a build program corresponding to Ninja"。
+        # 对非 Ninja generator 的 preset，CMAKE_MAKE_PROGRAM 也会被忽略，无副作用。
+        if not shutil.which("ninja"):
+            ninja = find_ninja()
+            if ninja:
+                cmake_cmd.append(f"-DCMAKE_MAKE_PROGRAM={ninja}")
+
+        cmake_cmd.extend(task.extra_cmake_args)
 
         run(cmake_cmd, cwd=BUILD_LIBS_DIR, env=env)
         return build_dir
