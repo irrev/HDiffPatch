@@ -51,6 +51,11 @@
 		#define HDIFFPATCH_IMPORT __attribute__((visibility("default")))
 		#endif
 
+		#ifdef HDIFFPATCH_PLATFORM_HARMONYOS
+		#define HDIFFPATCH_EXPORT __attribute__((visibility("default")))
+		#define HDIFFPATCH_IMPORT __attribute__((visibility("default")))
+		#endif
+
 		#if defined(HDIFFPATCH_EXPORTS)
 			#define HDIFFPATCH_API EXTERN HDIFFPATCH_EXPORT
 		#else

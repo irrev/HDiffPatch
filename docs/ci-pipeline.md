@@ -43,6 +43,8 @@ build (matrix: 11 platforms)  ──┐
 | linux-x64 | ubuntu-latest | linux-x64 |
 | macos | macos-latest | macos |
 | ios | macos-latest | ios |
+| harmonyos-arm64 | ubuntu-latest | harmonyos-arm64 |
+| harmonyos-x86_64 | ubuntu-latest | harmonyos-x86_64 |
 
 `fail-fast: false` 保证某个平台失败时其他平台仍继续，便于一次性看清所有问题。
 
@@ -62,9 +64,10 @@ build (matrix: 11 platforms)  ──┐
    git clone https://github.com/sisong/bzip2.git ../bzip2
    ```
 
-3. 安装工具链：CMake + Ninja、Xcode（mac/iOS）、MSVC（windows）、NDK + JDK + Android SDK（android）。
+3. 安装工具链：CMake + Ninja、Xcode（mac/iOS）、MSVC（windows）、NDK + JDK + Android SDK（android）、OpenHarmony NDK（harmonyos，从 GitHub 镜像 `openharmony-rs/ohos-sdk` 下载，受 env `OHOS_SDK_VERSION` 控制）。
 4. **Configure CMake** —— 根据平台选用对应分支：
-   - Android 额外注入 `-DCMAKE_ANDROID_NDK` 和 `-DCMAKE_TOOLCHAIN_FILE`。
+   - Android 额外注入 `-DCMAKE_ANDROID_NDK` 和 `-DCMAKE_TOOLCHAIN_FILE`；
+   - HarmonyOS 通过 `OHOS_NDK_HOME` 环境变量解析 preset 中的 toolchain 路径。
 5. `cmake --build ... --config Release` —— 出包。
 6. `actions/upload-artifact@v4` —— 上传整个 build 目录，artifact 名 = preset 名。
 
@@ -80,13 +83,15 @@ result/UEPlugins/PPakPatcher/Source/PPakPatcher/ThirdParty/HDiffPatch/
 │   ├── android/{arm64,armeabi,x86,x86_64}/libHDiffPatch.a
 │   ├── linux/{arm,x86,x64}/libHDiffPatch.a
 │   ├── macos/libHDiffPatch.a
-│   └── ios/libHDiffPatch.a
+│   ├── ios/libHDiffPatch.a
+│   └── harmonyos/{arm64,x86_64}/libHDiffPatch.a
 └── shared/                               # 动态库
     ├── windows/{x64,x86}/HDiffPatch.dll
     ├── android/{arm64,armeabi,x86,x86_64}/libHDiffPatch.so
     ├── linux/{arm,x86,x64}/libHDiffPatch.so
     ├── macos/libHDiffPatch.dylib
-    └── ios/HDiffPatch.framework
+    ├── ios/HDiffPatch.framework
+    └── harmonyos/{arm64,x86_64}/libHDiffPatch.so
 ```
 
 > macOS 与 iOS 的 artifact 路径多一层 `Release/`，是 Xcode 多配置生成器的产物形态，CI 中已正确处理。

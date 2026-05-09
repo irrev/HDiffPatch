@@ -52,22 +52,20 @@
 
 ### 5.1 当前已支持（由 CI 矩阵决定，是事实依据）
 
-Windows(x64, x86)、Android(arm64, armeabi, x86, x86_64)、Linux(arm, x86, x64)、macOS、iOS —— 共 **11** 个。
+- Windows(x64, x86)
+- Android(arm64, armeabi, x86, x86_64)
+- Linux(arm, x86, x64)
+- macOS（主机架构）
+- iOS（主机架构）
+- **HarmonyOS / 纯血鸿蒙（arm64, x86_64）** ✅ 阶段 1：仅产出 `build_libs` 库，
+  Layer 3 `PPakPatcher.Build.cs` 尚未加鸿蒙分支（等待 UE 官方支持）。
 
-### 5.2 规划中（尚未在 CI 出现）
+### 5.2 规划中
 
-- **HarmonyOS（纯血鸿蒙 / OHOS）** —— 下一个要加入的平台。
-  - 编译器：OHOS NDK（基于 clang）
-  - 目标架构：通常至少包含 `arm64-v8a`（后续可扩 `armeabi-v7a`、`x86_64`）
-  - 关键待办：
-    1. `build_libs/CMakePresets.json` 新增 `harmonyos-arm64` 等预设（参考 `android-*` 的思路）；
-    2. `build_libs/CMakeLists.txt` 新增 `elseif(OHOS) ... HDIFFPATCH_PLATFORM_HARMONYOS ...` 分支；
-    3. 上游代码若有 POSIX / Android 特殊分支，可能需在 Layer 1 最小化加 `#if` 分支（遵循 §4 "最小化修改"规则）；
-    4. `.github/workflows/ci-build-ueplugins.yml` matrix 与 `copy_lib` 段增加对应项；
-    5. `UEPlugins/PPakPatcher/Source/PPakPatcher/PPakPatcher.Build.cs` 需支持 UE 的鸿蒙 Target（如该版本 UE 已支持）；
-    6. 文档同步：`docs/architecture.md`、`docs/ci-pipeline.md`、`docs/build-libs.md` 的平台表。
+- HarmonyOS UE 集成（阶段 2）：等 UE 官方支持鸿蒙 Target 后，补 `PPakPatcher.Build.cs` 平台分支。
+- HarmonyOS armeabi-v7a（如有需求再加）。
 
 > 当用户询问"是否支持 XXX 平台"时：
 > - 命中 §5.1 列表 → 回答已支持；
-> - 命中 §5.2 → 回答"规划中，未在 CI 验证"；
+> - 命中 §5.2 → 回答"规划中"；
 > - 其他 → 回答"当前未规划"，**不要虚构支持情况**。

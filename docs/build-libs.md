@@ -117,7 +117,56 @@ cmake -B ../build/android-arm64 -S . \
 cmake --build ../build/android-arm64 --config Release
 ```
 
-> 完整 11 个平台的预设见 `CMakePresets.json`，与 CI matrix 一一对应。
+### HarmonyOS arm64 / x86_64
+
+需先准备 OpenHarmony NDK 或 HarmonyOS NDK 任一：
+
+| 来源 | 安装方式 |
+| ---- | -------- |
+| **DevEco Studio**（Win/macOS 推荐） | 安装 DevEco Studio 6+，SDK 自动位于 `C:\Program Files\Huawei\DevEco Studio\sdk\default\openharmony\native`（Windows） |
+| **OpenHarmony NDK**（Linux / 离线推荐） | 从 https://github.com/openharmony-rs/ohos-sdk/releases 下载并解压 |
+
+将环境变量指向 `native/` 那一层：
+
+```powershell
+# Windows（DevEco Studio 6.0.0.868 默认）
+$env:OHOS_NDK_HOME = "C:\Program Files\Huawei\DevEco Studio\sdk\default\openharmony\native"
+```
+
+```bash
+# Linux / 离线 NDK
+export OHOS_NDK_HOME=/path/to/ohos-sdk/linux/native
+```
+
+构建：
+
+```bash
+cd build_libs
+cmake -B ../build/harmonyos-arm64 -S . --preset=harmonyos-arm64
+cmake --build ../build/harmonyos-arm64 --config Release
+```
+
+> 完整 13 个平台的预设见 `CMakePresets.json`，与 CI matrix 一一对应。
+
+## 6.1 用本地 Python 脚本一键构建（推荐）
+
+仓库提供了 `local_build_lib/` 目录，每平台一个脚本，自动处理依赖克隆、cmake 调用、产物归档：
+
+```powershell
+# Windows
+python local_build_lib\local_build_windows.py
+python local_build_lib\local_build_harmonyos.py    # 自动探测 DevEco Studio SDK
+python local_build_lib\local_build_android.py
+```
+
+```bash
+# Linux / macOS
+python local_build_lib/local_build_linux.py
+python local_build_lib/local_build_harmonyos.py --ndk-home /path/to/ohos-sdk/.../native
+python local_build_lib/build_all.py                 # 一键跑当前 OS 上能跑的所有平台
+```
+
+详细说明见 [`local_build_lib/README.md`](../local_build_lib/README.md)。
 
 ## 7. 新增对外 API 的步骤
 

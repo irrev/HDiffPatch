@@ -26,29 +26,28 @@
 5. 更新 `docs/architecture.md`、`docs/ci-pipeline.md`、`docs/build-libs.md` 的平台表。
 6. 建议在 PR 描述里贴一次成功的 CI run 链接。
 
-### B.1 HarmonyOS（纯血鸿蒙 / OHOS）专项 —— 规划中
+### B.1 HarmonyOS（纯血鸿蒙 / OHOS）—— 阶段 1 已落地
 
-当前仓库**尚未**包含 HarmonyOS 支持，但已明确为下一个待加入平台。
-AI 在接到相关任务时，除按 §B 通用流程外，还需注意：
+阶段 1（Layer 2 + CI）已完成，参考实现：
 
-1. **工具链**：OHOS NDK（clang-based）。CI runner 建议 `ubuntu-latest`，在 workflow 中加入
-   OHOS NDK 的下载 / 解压步骤（参考现有 `android` 分支对 NDK 的处理）。
-2. **CMake 预设**：新增 `harmonyos-arm64` 等，toolchain 文件使用 OHOS NDK 提供的
-   `ohos.toolchain.cmake`（具体名以实际 NDK 版本为准）。
-3. **平台宏**：在 `build_libs/CMakeLists.txt` 新增
-   `elseif(OHOS) target_compile_definitions(... HDIFFPATCH_PLATFORM_HARMONYOS)`；
-   在 `build_libs/include/HDiffPatch.h` 对应地增加 `#ifdef HDIFFPATCH_PLATFORM_HARMONYOS` 分支
-   定义 `HDIFFPATCH_EXPORT` / `HDIFFPATCH_IMPORT`（类似 Linux/Android 的 `visibility("default")`）。
-4. **上游 Layer 1 兼容**：若上游代码在 POSIX / Android 分支里存在无法直接复用的实现，
-   **允许最小化修改 Layer 1**（见任务 I），以增加 `#if defined(__OHOS__)` 等分支。
-5. **运行时动态库**：HarmonyOS 的动态库仍是 ELF `.so`，与 Android/Linux 相近；
-   拷贝目标目录建议参考 Android 形式：
-   ```
-   ThirdParty/HDiffPatch/lib/harmonyos/<arch>/libHDiffPatch.a
-   ThirdParty/HDiffPatch/shared/harmonyos/<arch>/libHDiffPatch.so
-   ```
-6. **UE 侧**：确认所用 UE 版本对 HarmonyOS Target 的支持情况。如该版本 UE 尚不支持鸿蒙 Target，
-   可先仅产出库文件，后续再在 `PPakPatcher.Build.cs` 补上平台分支。
+- `build_libs/CMakePresets.json`：`harmonyos-arm64`、`harmonyos-x86_64`
+- `build_libs/CMakeLists.txt`：`elseif(OHOS) ... HDIFFPATCH_PLATFORM_HARMONYOS`
+- `build_libs/include/HDiffPatch.h`：`#ifdef HDIFFPATCH_PLATFORM_HARMONYOS` 导出宏分支
+- `.github/workflows/ci-build-ueplugins.yml`：env `OHOS_SDK_VERSION` + "Set up OpenHarmony SDK" 步骤 + Configure (HarmonyOS) 分支 + release `copy_lib`
+- `local_build_lib/local_build_harmonyos.py`：本地脚本，自动探测 DevEco Studio 内置 SDK
+- 产物路径：`ThirdParty/HDiffPatch/{lib,shared}/harmonyos/{arm64,x86_64}/`
+
+阶段 2（待办）：UE 官方支持鸿蒙 Target 后，在 `PPakPatcher.Build.cs` 加 HarmonyOS 平台分支。
+当前 `Build.cs` **不要** 主动加鸿蒙分支，否则 UE 编译会报"未知平台"。
+
+通用注意：
+
+- 默认用 OpenHarmony NDK（开源、CI 免登录）；本地可用 DevEco Studio 内置 SDK
+  （`C:\Program Files\Huawei\DevEco Studio\sdk\default\openharmony\native`）。
+- 上游 Layer 1 在 OHOS 上**目前无需 fork-patch**（POSIX + musl 即可工作）。
+  若以后需要，按任务 I 流程处理。
+
+
 
 
 

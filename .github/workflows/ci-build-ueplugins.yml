@@ -32,12 +32,15 @@ jobs:
       XC_VERSION: ${{ '16.3' }}
       CMAKE_VERSION: '3.29.0'
       VCPKG_ROOT: "${{ github.workspace }}/vcpkg"
+      # OpenHarmony SDK 版本（用于 HarmonyOS 平台构建）
+      # 镜像源：https://github.com/openharmony-rs/ohos-sdk/releases
+      OHOS_SDK_VERSION: '5.0.0-Release'
 
     strategy:
       # Set fail-fast to false to ensure that feedback is delivered for all matrix combinations. Consider changing this to true when your workflow is stable.
       fail-fast: false
       matrix:
-        build_target: [windows-x64, windows-x86, android-arm64, android-armeabi, android-x86, android-x86_64, linux-arm, linux-x86, linux-x64, macos, ios]
+        build_target: [windows-x64, windows-x86, android-arm64, android-armeabi, android-x86, android-x86_64, linux-arm, linux-x86, linux-x64, macos, ios, harmonyos-arm64, harmonyos-x86_64]
         build_type: [Release]
         include:
           - build_target: windows-x64
@@ -73,6 +76,12 @@ jobs:
           - build_target: ios
             os: macos-latest
             preset: ios
+          - build_target: harmonyos-arm64
+            os: ubuntu-latest
+            preset: harmonyos-arm64
+          - build_target: harmonyos-x86_64
+            os: ubuntu-latest
+            preset: harmonyos-x86_64
     steps:
     - uses: actions/checkout@v4
 
@@ -184,6 +193,13 @@ jobs:
         -DCMAKE_TOOLCHAIN_FILE=${{ steps.setup-ndk.outputs.ndk-path }}/build/cmake/android.toolchain.cmake
         --preset=${{ matrix.preset }}
 
+    - name: Configure CMake (HarmonyOS)
+      if: startsWith(matrix.preset, 'harmonyos')
+      run: >
+        cmake -B ${{ steps.strings.outputs.build-output-dir }}
+        -S ${{ steps.strings.outputs.cmake-dir }}
+        --preset=${{ matrix.preset }}
+
     - name: Build
       # Build your program with the given configuration. Note that --config is needed because the default Windows generator is a multi-config generator (Visual Studio generator).
       run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.build_type }}
@@ -274,6 +290,12 @@ jobs:
           # iOS
           copy_lib "archive/ios/static/Release/libHDiffPatch.a" "$BASE_PATH/lib/ios" "libHDiffPatch.a"
           copy_lib "archive/ios/shared/Release/HDiffPatch.framework" "$BASE_PATH/shared/ios" "HDiffPatch.framework"
+
+          # HarmonyOS
+          copy_lib "archive/harmonyos-arm64/static/libHDiffPatch.a"   "$BASE_PATH/lib/harmonyos/arm64"     "libHDiffPatch.a"
+          copy_lib "archive/harmonyos-arm64/shared/libHDiffPatch.so"  "$BASE_PATH/shared/harmonyos/arm64"  "libHDiffPatch.so"
+          copy_lib "archive/harmonyos-x86_64/static/libHDiffPatch.a"  "$BASE_PATH/lib/harmonyos/x86_64"    "libHDiffPatch.a"
+          copy_lib "archive/harmonyos-x86_64/shared/libHDiffPatch.so" "$BASE_PATH/shared/harmonyos/x86_64" "libHDiffPatch.so"
 
       - name: Copy Head
         shell: bash

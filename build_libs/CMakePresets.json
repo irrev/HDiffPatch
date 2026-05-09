@@ -179,6 +179,36 @@
                 "CMAKE_SYSTEM_NAME": "Linux",
                 "CMAKE_SYSTEM_PROCESSOR": "x86_64"
             }
+        },
+        {
+            "name": "harmonyos-arm64",
+            "displayName": "HarmonyOS arm64",
+            "description": "Build for HarmonyOS / OpenHarmony arm64-v8a (use OHOS_NDK_HOME env to point to native/ dir)",
+            "binaryDir": "${sourceDir}/out/harmonyos-arm64",
+            "generator": "Ninja",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "CMAKE_SYSTEM_NAME": "OHOS",
+                "OHOS_ARCH": "arm64-v8a",
+                "OHOS_PLATFORM": "OHOS",
+                "OHOS_STL": "c++_shared",
+                "CMAKE_TOOLCHAIN_FILE": "$env{OHOS_NDK_HOME}/build/cmake/ohos.toolchain.cmake"
+            }
+        },
+        {
+            "name": "harmonyos-x86_64",
+            "displayName": "HarmonyOS x86_64",
+            "description": "Build for HarmonyOS / OpenHarmony x86_64 (emulator)",
+            "binaryDir": "${sourceDir}/out/harmonyos-x86_64",
+            "generator": "Ninja",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "CMAKE_SYSTEM_NAME": "OHOS",
+                "OHOS_ARCH": "x86_64",
+                "OHOS_PLATFORM": "OHOS",
+                "OHOS_STL": "c++_shared",
+                "CMAKE_TOOLCHAIN_FILE": "$env{OHOS_NDK_HOME}/build/cmake/ohos.toolchain.cmake"
+            }
         }
     ]
 }
