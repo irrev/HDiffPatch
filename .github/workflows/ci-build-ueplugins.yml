@@ -32,9 +32,7 @@ jobs:
       XC_VERSION: ${{ '16.3' }}
       CMAKE_VERSION: '3.29.0'
       VCPKG_ROOT: "${{ github.workspace }}/vcpkg"
-      # OpenHarmony SDK 版本（用于 HarmonyOS 平台构建）
-      # 镜像源：https://github.com/openharmony-rs/ohos-sdk/releases
-      OHOS_SDK_VERSION: '5.0.0-Release'
+      OHOS_SDK_VERSION: '6.0.0.1'
 
     strategy:
       # Set fail-fast to false to ensure that feedback is delivered for all matrix combinations. Consider changing this to true when your workflow is stable.
@@ -155,6 +153,37 @@ jobs:
       if: startsWith(matrix.preset, 'android')
       run: |
         echo "NDK_ROOT=${{steps.setup-ndk.outputs.ndk-path}}" >> $GITHUB_ENV
+
+    - name: Set up OpenHarmony SDK (HarmonyOS)
+      if: startsWith(matrix.preset, 'harmonyos')
+      uses: openharmony-rs/setup-ohos-sdk@v0.1
+      id: setup-ohos
+      with:
+        version: ${{ env.OHOS_SDK_VERSION }}
+
+    - name: Set OHOS_NDK_HOME
+      if: startsWith(matrix.preset, 'harmonyos')
+      shell: bash
+      run: |
+        if [ -n "${OHOS_SDK_NATIVE:-}" ]; then
+          echo "OHOS_NDK_HOME=$OHOS_SDK_NATIVE" >> $GITHUB_ENV
+        else
+          # fallback: 从 sdk-path output 推导
+          SDK_PATH="${{ steps.setup-ohos.outputs.sdk-path }}"
+          NATIVE_DIR="$(find "$SDK_PATH" -type d -name native -path '*/openharmony/native' | head -n1)"
+          if [ -z "$NATIVE_DIR" ]; then
+            NATIVE_DIR="$(find "$SDK_PATH" -type d -name native | head -n1)"
+          fi
+          echo "OHOS_NDK_HOME=$NATIVE_DIR" >> $GITHUB_ENV
+        fi
+        echo "OHOS_NDK_HOME=${OHOS_NDK_HOME:-$NATIVE_DIR}"
+        ls "${OHOS_NDK_HOME:-$NATIVE_DIR}/build/cmake/" || echo "WARNING: toolchain not found, check SDK structure"
+
+    - name: Install Ninja (HarmonyOS)
+      if: startsWith(matrix.preset, 'harmonyos')
+      shell: bash
+      run: |
+        sudo apt-get install -y ninja-build
 
     - name: Configure CMake (Windows)
       if: startsWith(matrix.preset, 'windows')
