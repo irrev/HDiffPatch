@@ -1,6 +1,7 @@
 #pragma once
 #include "CoreMinimal.h"
 #include "Modules/ModuleManager.h"
+#include "Data/PPakPatcherDataType.h"
 #include "IPPakPatcher.h"
 #include "IPBinPatcher.h"
 

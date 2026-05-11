@@ -10,7 +10,7 @@ FPSignedPakPatchWriter::FPSignedPakPatchWriter(FArchive& InPak, const FString& I
 	: FArchive(InPak)
 	, BufferArchive(Buffer)
 	, PakWriter(InPak)
-	, PakSignaturesFilename(FPaths::ChangeExtension(InPakFilename, FPPakPatcherSettings::Get().NewSignExtension))
+	, PakSignaturesFilename(FPaths::ChangeExtension(InPakFilename, UPPakPatcherSettings::Get().NewSignExtension))
 	, SizeOnDisk(0)
 	, NewSize(0)
 	, SigningKey(InSigningKey)

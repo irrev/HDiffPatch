@@ -75,7 +75,7 @@ bool FPPakFileData::Compare(FPPakFileData& Other)
 
 const FString& FPPakFileData::GetPakFileMD5()
 {
-	if (FileMD5.IsEmpty() && FPPakPatcherSettings::Get().bGenPakFileMD5)
+	if (FileMD5.IsEmpty() && UPPakPatcherSettings::Get().bGenPakFileMD5)
 	{
 		const double StartTime = FPlatformTime::Seconds();
 		FMD5Hash Hash = FMD5Hash::HashFile(*PakFilename);

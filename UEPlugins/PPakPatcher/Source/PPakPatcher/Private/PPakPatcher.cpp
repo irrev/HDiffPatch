@@ -1,5 +1,4 @@
 #include "PPakPatcher.h"
-#include "PakFileUtilities.h"
 #include "PPakPatcherModule.h"
 #include "Data/PPakPatcherDataType.h"
 #include "Data/PPakPatcherKeyChainHelper.h"
@@ -9,6 +8,9 @@
 #include "Utils/PDebugMemoryBank.h"
 #include "PPakPatcherSettings.h"
 
+#if WITH_EDITOR
+#include "PakFileUtilities.h"
+#endif
 //begin engine heads
 #include "Misc/ICompressionFormat.h"
 #include "Misc/KeyChainUtilities.h"
@@ -96,7 +98,7 @@ bool FPPakPatcher::CreatePakDiff(const FString& InPatchFilename, const FPPakFile
 
 		NewPakArchive.Seek(NewEntry.Offset);
 
-		if (FPPakPatcherSettings::Get().bDoubleCheckEntry)
+		if (UPPakPatcherSettings::Get().bDoubleCheckEntry)
 		{
 			//double check new entry info and move NewPakArchive into place
 			FPakEntry NewEntryInfo;
@@ -116,7 +118,7 @@ bool FPPakPatcher::CreatePakDiff(const FString& InPatchFilename, const FPPakFile
 		{
 			const int64 OldRealSize = CalcEntryRealSize(OldEntry, OldPakFile);
 			OldPakArchive.Seek(OldEntry.Offset);
-			if (FPPakPatcherSettings::Get().bDoubleCheckEntry)
+			if (UPPakPatcherSettings::Get().bDoubleCheckEntry)
 			{
 				//double check old entry info and move OldPakReader into place
 				FPakEntry OldEntryInfo;
@@ -195,7 +197,7 @@ bool FPPakPatcher::CreatePakDiff(const FString& InPatchFilename, const FPPakFile
 
 	// record new pak index block
 	{
-		bool bIsPatchData = FPPakPatcherSettings::Get().bBinaryPatchIndexBlock;
+		bool bIsPatchData = UPPakPatcherSettings::Get().bBinaryPatchIndexBlock;
 
 		int64 NewOffset = NewPakInfo.IndexOffset;
 		int64 NewSize = NewPakInfo.IndexSize;
@@ -207,7 +209,7 @@ bool FPPakPatcher::CreatePakDiff(const FString& InPatchFilename, const FPPakFile
 
 	// record path hash & full directory index block
 	{
-		bool bIsPatchData = FPPakPatcherSettings::Get().bBinaryPatchPathBlock;
+		bool bIsPatchData = UPPakPatcherSettings::Get().bBinaryPatchPathBlock;
 
 		int64 NewOffset = NewPakInfo.IndexOffset + NewPakInfo.IndexSize;
 		int64 NewEnd = NewPakArchive.TotalSize() - NewPakInfo.GetSerializedSize(NewPakInfo.Version) - 1;
@@ -222,7 +224,7 @@ bool FPPakPatcher::CreatePakDiff(const FString& InPatchFilename, const FPPakFile
 
 	// record head block
 	{
-		bool bIsPatchData = FPPakPatcherSettings::Get().bBinaryPatchHeadBlock;
+		bool bIsPatchData = UPPakPatcherSettings::Get().bBinaryPatchHeadBlock;
 
 		int64 NewSize = NewPakInfo.GetSerializedSize(NewPakInfo.Version);
 		int64 NewOffset = NewPakArchive.TotalSize() - NewSize;
@@ -234,13 +236,13 @@ bool FPPakPatcher::CreatePakDiff(const FString& InPatchFilename, const FPPakFile
 
 	if (InNewPak->bIsSigned)
 	{
-		if (FPPakPatcherSettings::Get().bUseSignWriter)
+		if (UPPakPatcherSettings::Get().bUseSignWriter)
 		{
 			// Index hash use for SignedPakWriter
 			OutPatch->Info.IndexHash = NewPakInfo.IndexHash;
 			// TODO : currently missing private key
 		}
-		if (FPPakPatcherSettings::Get().bRecordSignToPatch)
+		if (UPPakPatcherSettings::Get().bRecordSignToPatch)
 		{
 			FString SignFilename = FPaths::ChangeExtension(InNewPak->PakFilename, TEXT("sig"));
 			FArchive* SignFileReader = IFileManager::Get().CreateFileReader(*SignFilename);
@@ -276,7 +278,7 @@ FArchive* CreatePakPatchWriter(const TCHAR* Filename, const FKeyChain& InKeyChai
 	FArchive* Writer = IFileManager::Get().CreateFileWriter(Filename);
 	if (Writer)
 	{
-		if (bSign && FPPakPatcherSettings::Get().bUseSignWriter)
+		if (bSign && UPPakPatcherSettings::Get().bUseSignWriter)
 		{
 			UE_LOG(LogPPakPacher, Display, TEXT("Creating signed pak %s."), Filename);
 			Writer = new FPSignedPakPatchWriter(*Writer, Filename, InKeyChain.GetSigningKey());
@@ -377,7 +379,7 @@ bool FPPakPatcher::PatchPak(const FString& InNewPakFilename, const FPPakFileData
 			if (FoundResult == FPakFile::EFindResult::Found)
 			{
 				OldPakArchive.Seek(OldEntry.Offset);
-				if (FPPakPatcherSettings::Get().bDoubleCheckEntry)
+				if (UPPakPatcherSettings::Get().bDoubleCheckEntry)
 				{
 					//double check old entry info and move OldPakReader into place
 					FPakEntry OldEntryInfo;
@@ -462,17 +464,17 @@ bool FPPakPatcher::PatchPak(const FString& InNewPakFilename, const FPPakFileData
 
 	if (bSign)
 	{
-		if (FPPakPatcherSettings::Get().bUseSignWriter)
+		if (UPPakPatcherSettings::Get().bUseSignWriter)
 		{
 			TArray<uint8> SignatureData;
 			SignatureData.Append(InPatch->Info.IndexHash.Hash, UE_ARRAY_COUNT(FSHAHash::Hash));
 			((FPSignedPakPatchWriter*)Writer.Get())->SetSignatureData(SignatureData);
 		}
-		if (FPPakPatcherSettings::Get().bRecordSignToPatch)
+		if (UPPakPatcherSettings::Get().bRecordSignToPatch)
 		{
 			FPPakPatchDataInfo& Info = InPatch->Info.SignFileInfo;
 			uint8* PatchData = InPatch->GetFilePatchData(Info);
-			FString SignFilename = FPaths::ChangeExtension(NewPakFilename, FPPakPatcherSettings::Get().NewSignExtension);
+			FString SignFilename = FPaths::ChangeExtension(NewPakFilename, UPPakPatcherSettings::Get().NewSignExtension);
 			FArchive* SignFileWriter = IFileManager::Get().CreateFileWriter(*SignFilename);
 			if (SignFileWriter)
 			{
@@ -566,7 +568,7 @@ bool FPPakPatcher::CheckPakDiff(const FPPakFileDataPtr& InNewPak, const FPPakFil
 			if (FoundResult == FPakFile::EFindResult::Found)
 			{
 				NewPakArchive.Seek(NewEntry.Offset);
-				if (FPPakPatcherSettings::Get().bDoubleCheckEntry)
+				if (UPPakPatcherSettings::Get().bDoubleCheckEntry)
 				{
 					//double check new entry info and move NewPakReader into place
 					FPakEntry _NewEntry;

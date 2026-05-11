@@ -216,7 +216,7 @@ bool FPPakPatchData::LoadFromFile(const FString& InPatchFilename)
 	}
 
 	DataSourceType = EPPatchDataSourceType::Load;
-	bUsePrecache = FPPakPatcherSettings::Get().bPrecachePatchDataOnLoad;
+	bUsePrecache = UPPakPatcherSettings::Get().bPrecachePatchDataOnLoad;
 
 	// step 1: read head offset.
 	Reader->Seek(Reader->TotalSize() - sizeof(HeadOffset));
@@ -259,7 +259,7 @@ bool FPPakPatchData::BeginRecord(const FString& InPatchFilename, const FPPakFile
 	Info.MountPoint = InNewPak->PakFilePtr->GetMountPoint();
 
 	DataSourceType = EPPatchDataSourceType::Record;
-	bUsePrecache = FPPakPatcherSettings::Get().bPrecachePatchDataOnSave;
+	bUsePrecache = UPPakPatcherSettings::Get().bPrecachePatchDataOnSave;
 
 	if (!bUsePrecache)
 	{

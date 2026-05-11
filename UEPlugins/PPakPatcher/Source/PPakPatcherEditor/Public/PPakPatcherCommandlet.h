@@ -8,11 +8,11 @@
 * 功能: 
 *	CreatePakPatch: 生成新旧两个pak之间的patch文件。patch文件的后缀为'.patch'
 *	参数:
-*		NewPak: 新的pak文件路径
-*		OldPak: 旧的pak文件路径
+*		New: 新的pak文件路径
+*		Old: 旧的pak文件路径
 *		Patch:	将要生成的patch文件路径
 *	例子：
-*		UE4Editor-cmd.exe -run="PPakPatcher" -CreatePakPatch -NewPak="" -OldPak="" -Patch=""
+*        UE4Editor-cmd.exe -run="PPakPatcher" -CreatePakPatch -NewPak="" -OldPak="" -Patch=""
 * 
 * 功能:
 *	CheckPakPatch: 检测新旧两个pak和patch文件之间的有效性。
@@ -41,6 +41,18 @@
 *		CopyNewIfNoOld:如果找不到匹配的旧的pak，就把新的复制过去。
 *	例子:
 *		UE4Editor-cmd.exe -run="PPakPatcher" -CreatePakPatchWithDir -NewDir="" -OldDir="" -PatchDir="" -CopyNewIfNoOld
+*
+*	功能:
+*	SimpleTest: 简单测试
+*		参数:
+*			无
+*		例子:
+*		     UE4Editor-cmd.exe -run="PPakPatcher" -SimpleTest
+*	UnitTest: 单元测试
+*		参数:
+*			无
+*		例子:
+*		     UE4Editor-cmd.exe -run="PPakPatcher" -UnitTest -NewDir="" -OldDir="" -PatchDir="" -CopyNewIfNoOld
 */
 
 
@@ -64,4 +76,7 @@ private:
 	TArray<FString> GatherPaksInDirectory(const FString InDir);
 	TMap<FString, FString> MakeNewOldMatchMap(const FString& InNewDir, const FString& InOldDir);
 	int32 CreatePakPatchWithDir(const FString& Params);
+
+	int32 SimpleTest(const FString& Params);
+	int32 UnitTest(const FString& Params);
 };

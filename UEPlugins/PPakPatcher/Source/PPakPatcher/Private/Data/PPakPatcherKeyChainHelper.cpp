@@ -280,9 +280,11 @@ bool FPPakPatcherKeyChainHelper::LoadKeyChainFromCommandline()
 			return false;
 		}
 
-		ANSICHAR* AsAnsi = TCHAR_TO_ANSI(*EncryptionKeyString);
+		auto AnsiKey = StringCast<ANSICHAR>(*EncryptionKeyString);
+		const ANSICHAR* AsAnsi = AnsiKey.Get();
 		check(TCString<ANSICHAR>::Strlen(AsAnsi) == RequiredKeyLength);
 		FMemory::Memcpy(NewKey.Key.Key, AsAnsi, RequiredKeyLength);
+
 		KeyChain.GetEncryptionKeys().Add(NewKey.Guid, NewKey);
 		UE_LOG(LogPPakPacher, Display, TEXT("Parsed AES encryption key from command line."));
 		return true;

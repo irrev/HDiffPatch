@@ -49,7 +49,6 @@ public class PPakPatcher : ModuleRules
 				"Json",
 				"PakFile",
 				"RSA",
-				"PakFileUtilities",
 				// ... add private dependencies that you statically link with here ...
 			}
 			);
@@ -69,6 +68,7 @@ public class PPakPatcher : ModuleRules
 					//"AssetManagerEditor",
 					//"PropertyEditor",
 					"SourceControl",
+                    "PakFileUtilities",
 				}
 			);
 		}
@@ -173,6 +173,31 @@ public class PPakPatcher : ModuleRules
 					PublicAdditionalLibraries.Add(Path.Combine(SharedPath, "ios", "libHDiffPatch.dylib"));
 				}
 			}
+			else if (IsTargetPlatform(Target.Platform, "OpenHarmony"))
+			{
+				PublicDefinitions.Add("HDIFFPATCH_PLATFORM_HARMONYOS=1");
+				if (bUseStaticLib)
+				{
+					PublicAdditionalLibraries.Add(Path.Combine(StaticPath, "harmonyos", "arm64", "libHDiffPatch.a"));
+					PublicAdditionalLibraries.Add(Path.Combine(StaticPath, "harmonyos", "x86_64", "libHDiffPatch.a"));
+				}
+				else
+				{
+					PublicAdditionalLibraries.Add(Path.Combine(SharedPath, "harmonyos", "arm64", "libHDiffPatch.so"));
+					PublicAdditionalLibraries.Add(Path.Combine(SharedPath, "harmonyos", "x86_64", "libHDiffPatch.so"));
+				}
+			}
 		}
+	}
+
+	/// <summary>
+	/// 安全检测 UnrealTargetPlatform 是否存在指定枚举值。
+	/// 当前 UE 版本若不含该枚举值（如 OpenHarmony），则静默返回 false，不会编译报错。
+	/// </summary>
+	private static bool IsTargetPlatform(UnrealTargetPlatform platform, string name)
+	{
+		// UnrealTargetPlatform 在不同 UE 版本中可能是 enum 或 struct（UE5.3+ 改为 struct）。
+		// 使用字符串比较最稳妥：ToString() 在所有版本都可用。
+		return platform.ToString().Equals(name, System.StringComparison.OrdinalIgnoreCase);
 	}
 }

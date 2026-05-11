@@ -2,6 +2,8 @@
 #include "PPakPatcherCommandlet.h"
 #include "Engine.h"
 #include "PPakPatcherModule.h"
+#include "UnitTest/PPakPatcherUnitTest.h"
+#include "Utils/PPakPatcherUtils.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogPakPatcherCommandlet, Display, All);
 
@@ -26,6 +28,14 @@ int32 UPPakPatcherCommandlet::Main(const FString& Params)
 	else if (FParse::Param(*Params, TEXT("CreatePakPatchWithDir")))
 	{
 		ErrorCode = CreatePakPatchWithDir(Params);
+	}
+	else if (FParse::Param(*Params, TEXT("SimpleTest")))
+	{
+		ErrorCode = SimpleTest(Params);
+	}
+	else if (FParse::Param(*Params, TEXT("UnitTest")))
+	{
+		ErrorCode = UnitTest(Params);
 	}
 
 	if (ErrorCode == 0)
@@ -113,26 +123,88 @@ int32 UPPakPatcherCommandlet::CreatePakPatch(const FString& Params)
 {
 	UE_LOG(LogPakPatcherCommandlet, Display, TEXT("Begin Create Pak Patch."));
 
-	FString NewPakFilename;
-	FString OldPakFilename;
-	FString PatchFileName;
+	FString New;
+	FString Old;
+	FString Patch;
 
-	if (!CheckFileParams(*Params, TEXT("NewPak="), NewPakFilename, true))
+	if (!FParse::Value(*Params, TEXT("New="), New, true))
 	{
+        UE_LOG(LogPakPatcherCommandlet, Error, TEXT("PPakPatcher::CheckParams - '%s' must be set!"), TEXT("New"));
 		return -1;
 	}
-	if (!CheckFileParams(*Params, TEXT("OldPak="), OldPakFilename, true))
+    if (!FParse::Value(*Params, TEXT("Old="), Old, true))
 	{
+        UE_LOG(LogPakPatcherCommandlet, Error, TEXT("PPakPatcher::CheckParams - '%s' must be set!"), TEXT("Old"));
+        return -1;
+    }
+    if (!FParse::Value(*Params, TEXT("Patch="), Patch, false))
+	{
+        UE_LOG(LogPakPatcherCommandlet, Error, TEXT("PPakPatcher::CheckParams - '%s' must be set!"), TEXT("Patch"));
+        return -1;
+	}
+
+	if (IFileManager::Get().FileExists(*New))
+	{
+		//single file mode.
+		UE_LOG(LogPakPatcherCommandlet, Display, TEXT("Create Pak Patch with SingleFileMode."));
+		if (!CreatePakPatch_Internal(New, Old, Patch))
+		{
+			return -1;
+		}
+	}
+	else if(IFileManager::Get().DirectoryExists(*New))
+	{
+		// directory mode.
+		UE_LOG(LogPakPatcherCommandlet, Display, TEXT("Create Pak Patch with DirectoryMode."));
+        TArray<FPFileCompareInfo> FileCompareInfos = FPPakPatcherUtils::CompareDirectories(New, Old);
+		for (FPFileCompareInfo& Info : FileCompareInfos)
+		{
+			UE_LOG(LogPakPatcherCommandlet, Display, TEXT("Filename:%s, DiffType: %s"), *Info.Filename, *UEnum::GetValueAsString(Info.DiffType));
+
+			if (Info.DiffType == EPFileCompareDiffType::Equal)
+			{
+				// do nothing
+				UE_LOG(LogPakPatcherCommandlet, Display, TEXT("Skip equal file. Pak: %s"), *Info.Filename);
+			}
+			else if (Info.DiffType == EPFileCompareDiffType::Add)
+			{
+				const FString CopyTarget = FPaths::Combine(Patch, Info.Filename);
+				UE_LOG(LogPakPatcherCommandlet, Display, TEXT("Copy Pak file by Add - from: %s, to: %s"), *Info.NewFullPath, *CopyTarget);
+				if (COPY_OK != IFileManager::Get().Copy(*CopyTarget, *Info.NewFullPath))
+				{
+                    UE_LOG(LogPakPatcherCommandlet, Error, TEXT("CopyFromContent: Failed copy from [%s] to [%s] !"), *Info.NewFullPath, *CopyTarget);
+					return -1;
+				}
+			}
+			else if(Info.DiffType == EPFileCompareDiffType::Delete)
+			{
+                // TODO: record delete case
+                UE_LOG(LogPakPatcherCommandlet, Display, TEXT("skip delete file - Pak: %s"), *Info.Filename);
+			}
+			else if (Info.DiffType == EPFileCompareDiffType::Modify)
+			{
+                UE_LOG(LogPakPatcherCommandlet, Display, TEXT("Create Pak Patch by Modify - New Pak: %s, Old Pak: %s"), *Info.NewFullPath, *Info.OldFullPath);
+				const FString& PatchFile = FPaths::Combine(Patch, Info.Filename);
+				if (!CreatePakPatch_Internal(Info.NewFullPath, Info.OldFullPath, PatchFile))
+				{
+					UE_LOG(LogPakPatcherCommandlet, Error, TEXT("Failed to genrate patch from new [%s] and old [%s] !"), *Info.NewFullPath, *Info.OldFullPath);
+					return -1;
+				}
+			}
+			else
+			{
+				UE_LOG(LogPakPatcherCommandlet, Error, TEXT("Unknown DiffType: %s"), *UEnum::GetValueAsString(Info.DiffType));
+				return -1;
+			}
+		}
+	}
+	else
+	{
+		UE_LOG(LogPakPatcherCommandlet, Error, TEXT("PPakPatcher::CheckParams - '%s' is not exist!"), *New);
 		return -1;
 	}
-	if (!CheckFileParams(*Params, TEXT("Patch="), PatchFileName, false))
-	{
-		return -1;
-	}
-	if (!CreatePakPatch_Internal(NewPakFilename, OldPakFilename, PatchFileName))
-	{
-		return -1;
-	}
+
+    UE_LOG(LogPakPatcherCommandlet, Display, TEXT("Finish Create Pak Patch."));
 	return 0;
 }
 
@@ -368,11 +440,11 @@ int32 UPPakPatcherCommandlet::CreatePakPatchWithDir(const FString& Params)
 	FString PatchDir;
 	bool bCopyNewIfNoOld = Params.Contains(TEXT("-CopyNewIfNoOld"));
 
-	if (!CheckDirParams(*Params, TEXT("NewDir="), NewDir), true)
+	if (!CheckDirParams(*Params, TEXT("NewDir="), NewDir, true))
 	{
 		return -1;
 	}
-	if (!CheckDirParams(*Params, TEXT("OldDir="), OldDir), true)
+	if (!CheckDirParams(*Params, TEXT("OldDir="), OldDir, true))
 	{
 		return -1;
 	}
@@ -414,5 +486,56 @@ int32 UPPakPatcherCommandlet::CreatePakPatchWithDir(const FString& Params)
 	}
 
 	UE_LOG(LogPakPatcherCommandlet, Display, TEXT("Finish generate Patch files. output dir:%s"), *PatchDir);
+	return 0;
+}
+
+int32 UPPakPatcherCommandlet::SimpleTest(const FString& Params)
+{
+	UE_LOG(LogPakPatcherCommandlet, Display, TEXT("Begin SimpleTest."));
+	if (FPPakPatcherUnitTest::Get().SimpleTest())
+	{
+        UE_LOG(LogPakPatcherCommandlet, Display, TEXT("SimpleTest Successed."));
+	}
+	else
+	{
+        UE_LOG(LogPakPatcherCommandlet, Error, TEXT("SimpleTest Failed."));
+		return -1;
+	}
+	return 0;
+}
+
+int32 UPPakPatcherCommandlet::UnitTest(const FString& Params)
+{
+    UE_LOG(LogPakPatcherCommandlet, Display, TEXT("Begin UnitTest."));
+
+	FString NewDir;
+	FString OldDir;
+	FString Output;
+
+	if (!CheckDirParams(*Params, TEXT("NewDir="), NewDir, true))
+	{
+		return -1;
+	}
+	if (!CheckDirParams(*Params, TEXT("OldDir="), OldDir, true))
+	{
+		return -1;
+	}
+	if (!CheckDirParams(*Params, TEXT("Output="), Output, false, true))
+	{
+		return -1;
+	}
+
+
+	FString PatchDir = Output / TEXT("Patch");
+	FString PatchedNew = Output / TEXT("PatchedNew");
+    if(FPPakPatcherUnitTest::Get().DirecotryDiffPatchTest(NewDir, OldDir, Output, PatchDir, PatchedNew))
+	{
+		UE_LOG(LogPakPatcherCommandlet, Display, TEXT("Run All Tests Successed."));
+	}
+	else
+	{
+		UE_LOG(LogPakPatcherCommandlet, Error, TEXT("Run All Tests Failed."));
+		return -1;
+	}
 	return 0;
 }
