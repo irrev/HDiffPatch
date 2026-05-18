@@ -44,8 +44,6 @@ public class PPakPatcher : ModuleRules
 				"CoreUObject",
 				"Engine",
 				"AssetRegistry",
-				//"Puerts",
-				//"JsEnv",
 				"Json",
 				"PakFile",
 				"RSA",

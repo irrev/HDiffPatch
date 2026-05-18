@@ -4,21 +4,18 @@
 #include "Data/PPakFileData.h"
 #include "Data/PPakPatcherDataType.h"
 
+/**
+ * IPBinPatcher : 直接调用HDiffPatch生成diff数据，输入输出都是二进制数据。
+ */
+
 class PPAKPATCHER_API IPBinPatcher
 {
 public:
-	bool bUseSingleCompressMode = true;
+	virtual ~IPBinPatcher() = default;
 
-	// default 6, bin: 0--4  text: 4--9
-	int32 MinSingleMatchScore = 6;
-
-	// big cache max used O(oldSize) memory, match speed faster, but build big cache slow 
-	bool bUseBigCacheMatch = false;
-
-	int32 ThreadNum = 1;
-
-	//patchStepMemSize: default 256k, recommended 64k,2m etc...
-	int32 PatchStepMemSize = 262144;// 1024 * 256;
+	/** 从 UPPakPatcherSettings 重新拉取参数（HDiff 多线程/StepMemSize/MinMatchScore 等）。
+	 *  当 Settings 在运行期被修改（例如 Commandlet 命令行覆盖）时，调用此函数让 BinPatcher 实例同步最新值。 */
+	virtual void ReloadSettingsFromConfig() {}
 
 	virtual bool CreateDiff(const TArray<uint8>& InNew, const TArray<uint8>& InOld, TArray<uint8>& OutDiff,
 		EPakPatchCompressType InCompressType = EPakPatchCompressType::None) = 0;

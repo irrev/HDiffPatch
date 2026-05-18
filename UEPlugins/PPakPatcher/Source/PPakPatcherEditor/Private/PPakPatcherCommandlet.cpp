@@ -2,32 +2,257 @@
 #include "PPakPatcherCommandlet.h"
 #include "Engine.h"
 #include "PPakPatcherModule.h"
+#include "PPakPatcherSettings.h"
+#include "PPatchManager.h"
+#include "Data/PUpdateManifestSummary.h"
+#include "Patcher/FPResPatcher.h"
 #include "UnitTest/PPakPatcherUnitTest.h"
 #include "Utils/PPakPatcherUtils.h"
+#include "Data/PPakPatcherKeyChainHelper.h"
+#include "Misc/KeyChainUtilities.h"
+
 
 DEFINE_LOG_CATEGORY_STATIC(LogPakPatcherCommandlet, Display, All);
 
+namespace
+{
+	const TCHAR* PakAwarePreprocessToString(EPPakAwarePreprocess InValue)
+	{
+		switch (InValue)
+		{
+		case EPPakAwarePreprocess::NoDecrypt:            return TEXT("NoDecrypt");
+		case EPPakAwarePreprocess::DecryptAndCompress:   return TEXT("DecryptAndCompress");
+		case EPPakAwarePreprocess::DecryptAndDecompress: return TEXT("DecryptAndDecompress");
+		default:                                         return TEXT("Unknown");
+		}
+	}
+
+	const TCHAR* CheckFileHashTypeToString(EPPakCheckFileHashType InValue)
+	{
+		switch (InValue)
+		{
+		case EPPakCheckFileHashType::None:  return TEXT("None");
+		case EPPakCheckFileHashType::Crc32: return TEXT("Crc32");
+		case EPPakCheckFileHashType::MD5:   return TEXT("MD5");
+		default:                            return TEXT("Unknown");
+		}
+	}
+
+	template <typename T>
+	void LogOverrideOrIni(const TCHAR* InName, const TOptional<T>& InOpt, const FString& InValueAsString)
+	{
+		if (InOpt.IsSet())
+		{
+			UE_LOG(LogPakPatcherCommandlet, Display, TEXT("%s (override): %s"), InName, *InValueAsString);
+		}
+		else
+		{
+			UE_LOG(LogPakPatcherCommandlet, Display, TEXT("%s: <use Settings ini value>"), InName);
+		}
+	}
+}
+
+void FPPakPatcherCommandletParams::Parse(const FString& Params)
+{
+	FString Value;
+	if (FParse::Value(*Params, TEXT("Compress="), Value))
+	{
+		Value = Value.TrimStartAndEnd();
+		if (Value.Equals(TEXT("None"), ESearchCase::IgnoreCase)) CompressType = EPakPatchCompressType::None;
+        else if (Value.Equals(TEXT("ZLIB"), ESearchCase::IgnoreCase)) CompressType = EPakPatchCompressType::ZLIB;
+        else if (Value.Equals(TEXT("LZMA"), ESearchCase::IgnoreCase)) CompressType = EPakPatchCompressType::LZMA;
+        else if (Value.Equals(TEXT("LZMA2"), ESearchCase::IgnoreCase)) CompressType = EPakPatchCompressType::LZMA2;
+        else if (Value.Equals(TEXT("ZSTD"), ESearchCase::IgnoreCase)) CompressType = EPakPatchCompressType::ZSTD;
+        else if (Value.Equals(TEXT("LDEF"), ESearchCase::IgnoreCase)) CompressType = EPakPatchCompressType::LDEF;
+        else if (Value.Equals(TEXT("BZ2"), ESearchCase::IgnoreCase)) CompressType = EPakPatchCompressType::BZ2;
+	}
+	if (FParse::Value(*Params, TEXT("Mode="), Value))
+	{
+		Value = Value.TrimStartAndEnd();
+		if (Value.Equals(TEXT("Binary"), ESearchCase::IgnoreCase)) PatchMode = EPPakPatchMode::Binary;
+        else if (Value.Equals(TEXT("PakAware"), ESearchCase::IgnoreCase)) PatchMode = EPPakPatchMode::PakAware;
+	}
+	if (FParse::Value(*Params, TEXT("CheckMode="), Value))
+	{
+		Value = Value.TrimStartAndEnd();
+		if (Value.Equals(TEXT("PatchAndCompare"), ESearchCase::IgnoreCase)) CheckMode = EPPakUnitTestCheckMode::PatchAndCompare;
+        else if (Value.Equals(TEXT("HDiffCheck"), ESearchCase::IgnoreCase)) CheckMode = EPPakUnitTestCheckMode::HDiffCheck;
+        else if (Value.Equals(TEXT("Both"), ESearchCase::IgnoreCase)) CheckMode = EPPakUnitTestCheckMode::Both;
+	}
+
+	// -PakAwarePreprocess=NoDecrypt|DecryptAndCompress|DecryptAndDecompress
+	if (FParse::Value(*Params, TEXT("PakAwarePreprocess="), Value))
+	{
+		Value = Value.TrimStartAndEnd();
+		if (Value.Equals(TEXT("NoDecrypt"), ESearchCase::IgnoreCase))
+		{
+			PakAwarePreprocessOverride = EPPakAwarePreprocess::NoDecrypt;
+		}
+		else if (Value.Equals(TEXT("DecryptAndCompress"), ESearchCase::IgnoreCase))
+		{
+			PakAwarePreprocessOverride = EPPakAwarePreprocess::DecryptAndCompress;
+		}
+		else if (Value.Equals(TEXT("DecryptAndDecompress"), ESearchCase::IgnoreCase))
+		{
+			PakAwarePreprocessOverride = EPPakAwarePreprocess::DecryptAndDecompress;
+		}
+		else
+		{
+			UE_LOG(LogPakPatcherCommandlet, Warning,
+				TEXT("Unknown -PakAwarePreprocess value: %s. Allowed: NoDecrypt | DecryptAndCompress | DecryptAndDecompress"),
+				*Value);
+		}
+	}
+
+	// -CheckFileHashType=None|Crc32|MD5
+	if (FParse::Value(*Params, TEXT("CheckFileHashType="), Value))
+	{
+		Value = Value.TrimStartAndEnd();
+		if      (Value.Equals(TEXT("None"),  ESearchCase::IgnoreCase)) CheckFileHashTypeOverride = EPPakCheckFileHashType::None;
+		else if (Value.Equals(TEXT("Crc32"), ESearchCase::IgnoreCase)) CheckFileHashTypeOverride = EPPakCheckFileHashType::Crc32;
+		else if (Value.Equals(TEXT("MD5"),   ESearchCase::IgnoreCase)) CheckFileHashTypeOverride = EPPakCheckFileHashType::MD5;
+		else
+		{
+			UE_LOG(LogPakPatcherCommandlet, Warning,
+				TEXT("Unknown -CheckFileHashType value: %s. Allowed: None | Crc32 | MD5"), *Value);
+		}
+	}
+
+	// HDiff bool 开关：-NoSingleCompress / -bUseBigCacheMatch / -bDoubleCheckEntry / -NoDoubleCheckEntry
+	if (FParse::Param(*Params, TEXT("NoSingleCompress")))
+	{
+		UseSingleCompressModeOverride = false;
+	}
+	if (FParse::Param(*Params, TEXT("bUseBigCacheMatch")))
+	{
+		UseBigCacheMatchOverride = true;
+	}
+	if (FParse::Param(*Params, TEXT("bDoubleCheckEntry")))
+	{
+		DoubleCheckEntryOverride = true;
+	}
+	if (FParse::Param(*Params, TEXT("NoDoubleCheckEntry")))
+	{
+		DoubleCheckEntryOverride = false;
+	}
+
+	// HDiff int32 数值：-ThreadNum=, -StepMemSize=, -MinMatchScore=
+	int32 IntValue = 0;
+	if (FParse::Value(*Params, TEXT("ThreadNum="), IntValue))
+	{
+		ThreadNumOverride = IntValue;
+	}
+	if (FParse::Value(*Params, TEXT("StepMemSize="), IntValue))
+	{
+		StepMemSizeOverride = IntValue;
+	}
+	if (FParse::Value(*Params, TEXT("MinMatchScore="), IntValue))
+	{
+		MinMatchScoreOverride = IntValue;
+	}
+}
+
+void FPPakPatcherCommandletParams::Print()
+{
+	UE_LOG(LogPakPatcherCommandlet, Display, TEXT("CompressType: %s"), *UEnum::GetValueAsString(CompressType));
+	UE_LOG(LogPakPatcherCommandlet, Display, TEXT("PatchMode: %s"),    *UEnum::GetValueAsString(PatchMode));
+	UE_LOG(LogPakPatcherCommandlet, Display, TEXT("CheckMode: %s"),    *UEnum::GetValueAsString(CheckMode));
+
+	LogOverrideOrIni(TEXT("PakAwarePreprocess"),    PakAwarePreprocessOverride,
+		PakAwarePreprocessOverride.IsSet() ? PakAwarePreprocessToString(PakAwarePreprocessOverride.GetValue()) : FString());
+	LogOverrideOrIni(TEXT("CheckFileHashType"),     CheckFileHashTypeOverride,
+		CheckFileHashTypeOverride.IsSet() ? CheckFileHashTypeToString(CheckFileHashTypeOverride.GetValue()) : FString());
+	LogOverrideOrIni(TEXT("bUseSingleCompressMode"),UseSingleCompressModeOverride,
+		UseSingleCompressModeOverride.IsSet() ? (UseSingleCompressModeOverride.GetValue() ? TEXT("true") : TEXT("false")) : FString());
+	LogOverrideOrIni(TEXT("bUseBigCacheMatch"),     UseBigCacheMatchOverride,
+		UseBigCacheMatchOverride.IsSet() ? (UseBigCacheMatchOverride.GetValue() ? TEXT("true") : TEXT("false")) : FString());
+	LogOverrideOrIni(TEXT("bDoubleCheckEntry"),     DoubleCheckEntryOverride,
+		DoubleCheckEntryOverride.IsSet() ? (DoubleCheckEntryOverride.GetValue() ? TEXT("true") : TEXT("false")) : FString());
+	LogOverrideOrIni(TEXT("ThreadNum"),             ThreadNumOverride,
+		ThreadNumOverride.IsSet() ? FString::Printf(TEXT("%d"), ThreadNumOverride.GetValue()) : FString());
+	LogOverrideOrIni(TEXT("StepMemSize"),           StepMemSizeOverride,
+		StepMemSizeOverride.IsSet() ? FString::Printf(TEXT("%d"), StepMemSizeOverride.GetValue()) : FString());
+	LogOverrideOrIni(TEXT("MinMatchScore"),         MinMatchScoreOverride,
+		MinMatchScoreOverride.IsSet() ? FString::Printf(TEXT("%d"), MinMatchScoreOverride.GetValue()) : FString());
+}
+
+void FPPakPatcherCommandletParams::ApplyOverridesToSettings() const
+{
+	UPPakPatcherSettings& S = UPPakPatcherSettings::Get();
+
+	if (PakAwarePreprocessOverride.IsSet())   S.PakAwarePreprocess     = PakAwarePreprocessOverride.GetValue();
+	if (CheckFileHashTypeOverride.IsSet())    S.CheckFileHashType      = CheckFileHashTypeOverride.GetValue();
+	if (UseSingleCompressModeOverride.IsSet())S.bUseSingleCompressMode = UseSingleCompressModeOverride.GetValue();
+	if (UseBigCacheMatchOverride.IsSet())     S.bUseBigCacheMatch      = UseBigCacheMatchOverride.GetValue();
+	if (DoubleCheckEntryOverride.IsSet())     S.bDoubleCheckEntry      = DoubleCheckEntryOverride.GetValue();
+	if (ThreadNumOverride.IsSet())            S.ThreadNum              = ThreadNumOverride.GetValue();
+	if (StepMemSizeOverride.IsSet())          S.PatchStepMemSize       = StepMemSizeOverride.GetValue();
+	if (MinMatchScoreOverride.IsSet())        S.MinSingleMatchScore    = MinMatchScoreOverride.GetValue();
+
+	// HDiff 配置类字段会被 BinPatcher 在构造时拷到自己的成员里；此时 BinPatcher 已经 StartupModule 完成，
+	// 必须显式让 BinPatcher 重新拉取一次。
+	if (UseSingleCompressModeOverride.IsSet() ||
+		UseBigCacheMatchOverride.IsSet()      ||
+		ThreadNumOverride.IsSet()             ||
+		StepMemSizeOverride.IsSet()           ||
+		MinMatchScoreOverride.IsSet())
+	{
+		if (IPBinPatcher* BinPatcher = IPPakPatcherModule::Get().GetBinPatcher())
+		{
+			BinPatcher->ReloadSettingsFromConfig();
+		}
+	}
+}
 
 int32 UPPakPatcherCommandlet::Main(const FString& Params)
 {
 	UE_LOG(LogPakPatcherCommandlet, Display, TEXT("UPPakPatcherCommandlet params: %s"), *Params);
 
+	Input.Parse(Params);
+	Input.Print();
+
+	// 把命令行覆盖统一应用到 UPPakPatcherSettings 单例（HDiff 配置同时刷到 BinPatcher）。
+	// 未传的参数保持 ini 默认值不变；命令行覆盖只在当前 commandlet 进程内生效，不写回 ini。
+	Input.ApplyOverridesToSettings();
+
+	// 显式触发 KeyChain 加载并把结果应用到引擎全局（FCoreDelegates::GetRegisterEncryptionKeyMulticastDelegate），
+	// 这样后续 FPakFile / FPakInfo 读取加密 pak 时也能拿到 key。
+	// 命令行用法：
+	//   -cryptokeys="<path/to/Crypto.json>"          // 推荐
+	//   -aes="<32 字节 ANSI AES key>"                 // legacy
+	//   -EncryptionKeyOverrideGuid=<guid>             // 多 key 时指定 PrincipalKey
+	{
+		FKeyChain& KeyChain = FPPakPatcherKeyChainHelper::Get().GetKeyChain(/*bForceReload*/ true);
+		KeyChainUtilities::ApplyEncryptionKeys(KeyChain);
+		const int32 NumEncKeys = KeyChain.GetEncryptionKeys().Num();
+		const bool bHasSign = (KeyChain.GetSigningKey() != InvalidRSAKeyHandle);
+		UE_LOG(LogPakPatcherCommandlet, Display, TEXT("KeyChain loaded. EncryptionKeys=%d, HasSigningKey=%s"),
+			NumEncKeys, bHasSign ? TEXT("true") : TEXT("false"));
+	}
+
 	int32 ErrorCode = 0;
-	if (FParse::Param(*Params, TEXT("CreatePakPatch")))
+
+	// 注意：FParse::Param 是子串匹配，"CreatePakPatchWithDir" 会命中 "CreatePakPatch"。
+	// 所以长的 action 名必须排在短的前面（先匹配）。
+	if (FParse::Param(*Params, TEXT("CreatePakPatchWithDir")))
+	{
+		ErrorCode = CreatePakPatchWithDir(Params);
+	}
+	else if (FParse::Param(*Params, TEXT("PatchPakPatchWithDir")))
+	{
+		ErrorCode = PatchPakPatchWithDir(Params);
+	}
+	else if (FParse::Param(*Params, TEXT("CreatePakPatch")))
 	{
 		ErrorCode = CreatePakPatch(Params);
 	}
 	else if (FParse::Param(*Params, TEXT("CheckPakPatch")))
 	{
-		ErrorCode = CreatePakPatch(Params);
+		ErrorCode = CheckPakPatch(Params);
 	}
 	else if (FParse::Param(*Params, TEXT("PatchPak")))
 	{
-		ErrorCode = CreatePakPatch(Params);
-	}
-	else if (FParse::Param(*Params, TEXT("CreatePakPatchWithDir")))
-	{
-		ErrorCode = CreatePakPatchWithDir(Params);
+		ErrorCode = PatchPak(Params);
 	}
 	else if (FParse::Param(*Params, TEXT("SimpleTest")))
 	{
@@ -36,6 +261,11 @@ int32 UPPakPatcherCommandlet::Main(const FString& Params)
 	else if (FParse::Param(*Params, TEXT("UnitTest")))
 	{
 		ErrorCode = UnitTest(Params);
+	}
+	else
+	{
+		UE_LOG(LogPakPatcherCommandlet, Error, TEXT("UPPakPatcherCommandlet - Unknown command."));
+		return -1;
 	}
 
 	if (ErrorCode == 0)
@@ -127,43 +357,46 @@ int32 UPPakPatcherCommandlet::CreatePakPatch(const FString& Params)
 	FString Old;
 	FString Patch;
 
-	if (!FParse::Value(*Params, TEXT("New="), New, true))
+	// 统一使用 NewPak/OldPak 命名（与 -CheckPakPatch / -PatchPak 风格一致）
+	if (!FParse::Value(*Params, TEXT("NewPak="), New, true))
 	{
-        UE_LOG(LogPakPatcherCommandlet, Error, TEXT("PPakPatcher::CheckParams - '%s' must be set!"), TEXT("New"));
+		UE_LOG(LogPakPatcherCommandlet, Error, TEXT("PPakPatcher::CheckParams - '%s' must be set!"), TEXT("NewPak"));
 		return -1;
 	}
-    if (!FParse::Value(*Params, TEXT("Old="), Old, true))
+	if (!FParse::Value(*Params, TEXT("OldPak="), Old, true))
 	{
-        UE_LOG(LogPakPatcherCommandlet, Error, TEXT("PPakPatcher::CheckParams - '%s' must be set!"), TEXT("Old"));
-        return -1;
-    }
-    if (!FParse::Value(*Params, TEXT("Patch="), Patch, false))
+		UE_LOG(LogPakPatcherCommandlet, Error, TEXT("PPakPatcher::CheckParams - '%s' must be set!"), TEXT("OldPak"));
+		return -1;
+	}
+	if (!FParse::Value(*Params, TEXT("Patch="), Patch, false))
 	{
-        UE_LOG(LogPakPatcherCommandlet, Error, TEXT("PPakPatcher::CheckParams - '%s' must be set!"), TEXT("Patch"));
-        return -1;
+		UE_LOG(LogPakPatcherCommandlet, Error, TEXT("PPakPatcher::CheckParams - '%s' must be set!"), TEXT("Patch"));
+		return -1;
 	}
 
 	if (IFileManager::Get().FileExists(*New))
 	{
-		//single file mode.
-		UE_LOG(LogPakPatcherCommandlet, Display, TEXT("Create Pak Patch with SingleFileMode."));
+		// single file mode.
+		UE_LOG(LogPakPatcherCommandlet, Display, TEXT("Create Pak Patch with SingleFileMode. "));
+
 		if (!CreatePakPatch_Internal(New, Old, Patch))
 		{
 			return -1;
 		}
 	}
-	else if(IFileManager::Get().DirectoryExists(*New))
+	else if (IFileManager::Get().DirectoryExists(*New))
 	{
 		// directory mode.
-		UE_LOG(LogPakPatcherCommandlet, Display, TEXT("Create Pak Patch with DirectoryMode."));
-        TArray<FPFileCompareInfo> FileCompareInfos = FPPakPatcherUtils::CompareDirectories(New, Old);
+		UE_LOG(LogPakPatcherCommandlet, Display, TEXT("Create Pak Patch with DirectoryMode. Mode=%s"),
+			Input.PatchMode == EPPakPatchMode::Binary ? TEXT("Binary") : TEXT("PakAware"));
+
+		TArray<FPFileCompareInfo> FileCompareInfos = FPPakPatcherUtils::CompareDirectories(New, Old);
 		for (FPFileCompareInfo& Info : FileCompareInfos)
 		{
 			UE_LOG(LogPakPatcherCommandlet, Display, TEXT("Filename:%s, DiffType: %s"), *Info.Filename, *UEnum::GetValueAsString(Info.DiffType));
 
 			if (Info.DiffType == EPFileCompareDiffType::Equal)
 			{
-				// do nothing
 				UE_LOG(LogPakPatcherCommandlet, Display, TEXT("Skip equal file. Pak: %s"), *Info.Filename);
 			}
 			else if (Info.DiffType == EPFileCompareDiffType::Add)
@@ -172,20 +405,21 @@ int32 UPPakPatcherCommandlet::CreatePakPatch(const FString& Params)
 				UE_LOG(LogPakPatcherCommandlet, Display, TEXT("Copy Pak file by Add - from: %s, to: %s"), *Info.NewFullPath, *CopyTarget);
 				if (COPY_OK != IFileManager::Get().Copy(*CopyTarget, *Info.NewFullPath))
 				{
-                    UE_LOG(LogPakPatcherCommandlet, Error, TEXT("CopyFromContent: Failed copy from [%s] to [%s] !"), *Info.NewFullPath, *CopyTarget);
+					UE_LOG(LogPakPatcherCommandlet, Error, TEXT("CopyFromContent: Failed copy from [%s] to [%s] !"), *Info.NewFullPath, *CopyTarget);
 					return -1;
 				}
 			}
-			else if(Info.DiffType == EPFileCompareDiffType::Delete)
+			else if (Info.DiffType == EPFileCompareDiffType::Delete)
 			{
-                // TODO: record delete case
-                UE_LOG(LogPakPatcherCommandlet, Display, TEXT("skip delete file - Pak: %s"), *Info.Filename);
+				// TODO: record delete case
+				UE_LOG(LogPakPatcherCommandlet, Display, TEXT("skip delete file - Pak: %s"), *Info.Filename);
 			}
 			else if (Info.DiffType == EPFileCompareDiffType::Modify)
 			{
-                UE_LOG(LogPakPatcherCommandlet, Display, TEXT("Create Pak Patch by Modify - New Pak: %s, Old Pak: %s"), *Info.NewFullPath, *Info.OldFullPath);
+				UE_LOG(LogPakPatcherCommandlet, Display, TEXT("Create Pak Patch by Modify - New: %s, Old: %s"), *Info.NewFullPath, *Info.OldFullPath);
 				const FString& PatchFile = FPaths::Combine(Patch, Info.Filename);
-				if (!CreatePakPatch_Internal(Info.NewFullPath, Info.OldFullPath, PatchFile))
+				bool bOk = CreatePakPatch_Internal(Info.NewFullPath, Info.OldFullPath, PatchFile);
+				if (!bOk)
 				{
 					UE_LOG(LogPakPatcherCommandlet, Error, TEXT("Failed to genrate patch from new [%s] and old [%s] !"), *Info.NewFullPath, *Info.OldFullPath);
 					return -1;
@@ -204,40 +438,24 @@ int32 UPPakPatcherCommandlet::CreatePakPatch(const FString& Params)
 		return -1;
 	}
 
-    UE_LOG(LogPakPatcherCommandlet, Display, TEXT("Finish Create Pak Patch."));
+	UE_LOG(LogPakPatcherCommandlet, Display, TEXT("Finish Create Pak Patch."));
 	return 0;
 }
 
+
 bool UPPakPatcherCommandlet::CreatePakPatch_Internal(const FString& InNewPakFilename, const FString& InOldPakFilename, const FString& InPatchFilename)
 {
-	FPPakFileDataPtr NewPakFile = MakeShareable(new FPPakFileData());
-	if (!NewPakFile->LoadFromFile(InNewPakFilename))
+	FPResPatcher ResPatcher;
+	FPResPatchDataPtr PatchData;
+	if (!ResPatcher.CreateDiff(InPatchFilename, InNewPakFilename, InOldPakFilename, PatchData, Input.PatchMode, Input.CompressType))
 	{
-		UE_LOG(LogPakPatcherCommandlet, Error, TEXT("Load new pak failed.%s"), *InNewPakFilename);
+		UE_LOG(LogPakPatcherCommandlet, Error, TEXT("CreateDiff Failed. %s"), *InPatchFilename);
 		return false;
 	}
-
-	FPPakFileDataPtr OldPakFile = MakeShareable(new FPPakFileData());
-	if (!OldPakFile->LoadFromFile(InOldPakFilename))
-	{
-		UE_LOG(LogPakPatcherCommandlet, Error, TEXT("Load old pak failed.%s"), *InOldPakFilename);
-		return false;
-	}
-
-	IPPakPatcher* PakPatcher = IPPakPatcherModule::Get().GetPakPatcher();
-	FPPakPatchDataPtr PatchData;
-	if (PakPatcher->CreatePakDiff(InPatchFilename, NewPakFile, OldPakFile, PatchData))
-	{
-		UE_LOG(LogPakPatcherCommandlet, Display, TEXT("CreatePakDiff Successed. %s"), *InPatchFilename);
-	}
-	else
-	{
-		UE_LOG(LogPakPatcherCommandlet, Error, TEXT("CreatePakDiff Failed. %s"), *InPatchFilename);
-		return false;
-	}
+	UE_LOG(LogPakPatcherCommandlet, Display, TEXT("CreateDiff Successed. %s"), *InPatchFilename);
 
 	// save patch data to file.
-	if (PatchData->IsUsePrecache())
+	if (PatchData.IsValid() && PatchData->IsUsePrecache())
 	{
 		if (PatchData->SaveToFile(InPatchFilename))
 		{
@@ -266,6 +484,7 @@ int32 UPPakPatcherCommandlet::CheckPakPatch(const FString& Params)
 	{
 		return -1;
 	}
+
 	if (!CheckFileParams(*Params, TEXT("OldPak="), OldPakFilename, true))
 	{
 		return -1;
@@ -275,22 +494,8 @@ int32 UPPakPatcherCommandlet::CheckPakPatch(const FString& Params)
 		return -1;
 	}
 
-	FPPakFileDataPtr NewPakFile = MakeShareable(new FPPakFileData());
-	if (!NewPakFile->LoadFromFile(NewPakFilename))
-	{
-		UE_LOG(LogPakPatcherCommandlet, Error, TEXT("Load new pak failed.%s"), *NewPakFilename);
-		return -1;
-	}
-
-	FPPakFileDataPtr OldPakFile = MakeShareable(new FPPakFileData());
-	if (!OldPakFile->LoadFromFile(OldPakFilename))
-	{
-		UE_LOG(LogPakPatcherCommandlet, Error, TEXT("Load old pak failed.%s"), *OldPakFilename);
-		return -1;
-	}
-
 	// load patch data.
-	FPPakPatchDataPtr PatchData = MakeShareable(new FPPakPatchData());
+	FPResPatchDataPtr PatchData = MakeShareable(new FPResPatchData());
 	if (PatchData->LoadFromFile(PatchFileName))
 	{
 		UE_LOG(LogPakPatcherCommandlet, Display, TEXT("LoadFromFile Success."));
@@ -301,15 +506,14 @@ int32 UPPakPatcherCommandlet::CheckPakPatch(const FString& Params)
 		return -1;
 	}
 
-	IPPakPatcher* PakPatcher = IPPakPatcherModule::Get().GetPakPatcher();
-
-	if (PakPatcher->CheckPakDiff(NewPakFile, OldPakFile, PatchData))
+	FPResPatcher ResPatcher;
+	if (ResPatcher.CheckDiff(NewPakFilename, OldPakFilename, PatchData))
 	{
-		UE_LOG(LogPakPatcherCommandlet, Display, TEXT("CheckPakDiff Successed. %s"), *PatchFileName);
+		UE_LOG(LogPakPatcherCommandlet, Display, TEXT("CheckDiff Successed. %s"), *PatchFileName);
 	}
 	else
 	{
-		UE_LOG(LogPakPatcherCommandlet, Error, TEXT("CheckPakDiff Failed. %s"), *PatchFileName);
+		UE_LOG(LogPakPatcherCommandlet, Error, TEXT("CheckDiff Failed. %s"), *PatchFileName);
 		return -1;
 	}
 	UE_LOG(LogPakPatcherCommandlet, Display, TEXT("Finish CheckPakPatch process. %s"), *PatchFileName);
@@ -321,9 +525,11 @@ int32 UPPakPatcherCommandlet::PatchPak(const FString& Params)
 {
 	UE_LOG(LogPakPatcherCommandlet, Display, TEXT("Begin Patch Pak."));
 
+
 	FString NewPakFilename;
 	FString OldPakFilename;
 	FString PatchFileName;
+
 
 	if (!CheckFileParams(*Params, TEXT("NewPak="), NewPakFilename, false))
 	{
@@ -338,15 +544,8 @@ int32 UPPakPatcherCommandlet::PatchPak(const FString& Params)
 		return -1;
 	}
 
-	FPPakFileDataPtr OldPakFile = MakeShareable(new FPPakFileData());
-	if (!OldPakFile->LoadFromFile(OldPakFilename))
-	{
-		UE_LOG(LogPakPatcherCommandlet, Error, TEXT("Load old pak failed.%s"), *OldPakFilename);
-		return -1;
-	}
-
 	// load patch data.
-	FPPakPatchDataPtr PatchData = MakeShareable(new FPPakPatchData());
+	FPResPatchDataPtr PatchData = MakeShareable(new FPResPatchData());
 	if (PatchData->LoadFromFile(PatchFileName))
 	{
 		UE_LOG(LogPakPatcherCommandlet, Display, TEXT("LoadFromFile Success."));
@@ -357,15 +556,14 @@ int32 UPPakPatcherCommandlet::PatchPak(const FString& Params)
 		return -1;
 	}
 
-	IPPakPatcher* PakPatcher = IPPakPatcherModule::Get().GetPakPatcher();
-
-	if (PakPatcher->PatchPak(NewPakFilename, OldPakFile, PatchData))
+	FPResPatcher ResPatcher;
+	if (ResPatcher.PatchDiff(NewPakFilename, OldPakFilename, PatchData))
 	{
-		UE_LOG(LogPakPatcherCommandlet, Display, TEXT("PatchPak Successed. %s"), *PatchFileName);
+		UE_LOG(LogPakPatcherCommandlet, Display, TEXT("PatchDiff Successed. %s"), *PatchFileName);
 	}
 	else
 	{
-		UE_LOG(LogPakPatcherCommandlet, Error, TEXT("PatchPak Failed. %s"), *PatchFileName);
+		UE_LOG(LogPakPatcherCommandlet, Error, TEXT("PatchDiff Failed. %s"), *PatchFileName);
 		return -1;
 	}
 	UE_LOG(LogPakPatcherCommandlet, Display, TEXT("Finish PatchPak process. %s"), *PatchFileName);
@@ -375,60 +573,14 @@ int32 UPPakPatcherCommandlet::PatchPak(const FString& Params)
 
 TArray<FString> UPPakPatcherCommandlet::GatherPaksInDirectory(const FString InDir)
 {
-	TArray<FString> Result;
-	TArray<FString> Files;
-	IFileManager::Get().FindFilesRecursive(Files, *InDir, TEXT("*.*"), true, false);
-
-	for (const FString& File : Files)
-	{
-		if (File.EndsWith(TEXT(".pak")))
-		{
-			Result.Add(InDir / File);
-		}
-	}
-	return MoveTemp(Result);
+	// 已弃用：现统一由 FPPatchManager 内部按 chunk 名匹配。保留空实现避免外部链接错误。
+	return TArray<FString>();
 }
 
 TMap<FString, FString> UPPakPatcherCommandlet::MakeNewOldMatchMap(const FString& InNewDir, const FString& InOldDir)
 {
-	TMap<FString, FString> Result;
-	auto GetChunkName = [](const FString& InFilename) -> FString
-		{
-			FString Cleanname = FPaths::GetCleanFilename(InFilename);
-			FString Chunkname;
-			if (Cleanname.StartsWith(TEXT("chunk")) && Cleanname.EndsWith(TEXT(".pak")))
-			{
-				Cleanname.Split(TEXT("-"), &Chunkname, nullptr);
-			}
-			return Chunkname;
-		};
-
-	TArray<FString> NewPaks = GatherPaksInDirectory(InNewDir);
-	TArray<FString> OldPaks = GatherPaksInDirectory(InOldDir);
-
-	for (const FString& NewPak : NewPaks)
-	{
-		FString NewChunkname = GetChunkName(NewPak);
-		if (!NewChunkname.IsEmpty())
-		{
-			for (int32 i=0; i< OldPaks.Num(); ++i)
-			{
-				FString OldChunkname = GetChunkName(OldPaks[i]);
-				if (!OldChunkname.IsEmpty())
-				{
-					if (NewChunkname == OldChunkname)
-					{
-						Result.Add(NewPak, OldPaks[i]);
-						OldPaks.RemoveAt(i);
-						i--;
-						break;
-					}
-				}
-			}
-			Result.Add(NewPak, TEXT(""));
-		}
-	}
-	return MoveTemp(Result);
+	// 已弃用：现统一由 FPPatchManager::CreatePatch 内部按 chunk 名匹配。
+	return TMap<FString, FString>();
 }
 
 int32 UPPakPatcherCommandlet::CreatePakPatchWithDir(const FString& Params)
@@ -438,7 +590,6 @@ int32 UPPakPatcherCommandlet::CreatePakPatchWithDir(const FString& Params)
 	FString NewDir;
 	FString OldDir;
 	FString PatchDir;
-	bool bCopyNewIfNoOld = Params.Contains(TEXT("-CopyNewIfNoOld"));
 
 	if (!CheckDirParams(*Params, TEXT("NewDir="), NewDir, true))
 	{
@@ -453,39 +604,120 @@ int32 UPPakPatcherCommandlet::CreatePakPatchWithDir(const FString& Params)
 		return -1;
 	}
 
-	TMap<FString, FString> NewOldMap = MakeNewOldMatchMap(NewDir, OldDir);
-	for (auto It = NewOldMap.CreateConstIterator(); It; ++It)
+	// 走统一入口 FPPatchManager::CreatePatch：
+	//   - 自动读 <NewDir>/md5_file_list.txt 与 <OldDir>/md5_file_list.txt
+	//   - 自动按 chunk 名匹配新旧 .pak（含 IoStore 同伴文件联动）
+	//   - 自动按 New/Old MD5 判定 DiffType（Equal/Modify/Add/Delete）
+	//   - 自动产出 patch_manifest.txt
+	if (!FPPatchManager::Get().CreatePatch(OldDir, NewDir, PatchDir))
 	{
-		const FString& NewPak = It.Key();
-		const FString& OldPak = It.Value();
-		UE_LOG(LogPakPatcherCommandlet, Display, TEXT("New Pak: %s"), *NewPak);
-		UE_LOG(LogPakPatcherCommandlet, Display, TEXT("Old Pak: %s"), *OldPak);
-
-		if (!OldPak.IsEmpty())
-		{
-			FString OldBasename = FPaths::GetBaseFilename(OldPak);
-			FString PatchFilename = PatchDir / OldBasename + TEXT(".patch");
-
-			if (!CreatePakPatch_Internal(NewPak, OldPak, PatchFilename))
-			{
-				UE_LOG(LogPakPatcherCommandlet, Error, TEXT("CopyFromContent: Failed to genrate patch from new [%s] and old [%s] !"), *NewPak, *OldPak);
-				return -1;
-			}
-		}
-		else if (bCopyNewIfNoOld)
-		{
-			FString CopyFrom = NewPak;
-			FString CopyTo = PatchDir / FPaths::GetCleanFilename(NewPak);
-			if (COPY_OK != IFileManager::Get().Copy(*CopyTo, *CopyFrom))
-			{
-				UE_LOG(LogPakPatcherCommandlet, Error, TEXT("CopyFromContent: Failed copy from [%s] to [%s] !"), *CopyFrom, *CopyTo);
-				return -1;
-			}
-		}
-		
+		UE_LOG(LogPakPatcherCommandlet, Error,
+			TEXT("CreatePakPatchWithDir failed. New:%s Old:%s Patch:%s"), *NewDir, *OldDir, *PatchDir);
+		return -1;
 	}
 
 	UE_LOG(LogPakPatcherCommandlet, Display, TEXT("Finish generate Patch files. output dir:%s"), *PatchDir);
+	return 0;
+}
+
+// =========================================================================
+// PatchPakPatchWithDir
+// =========================================================================
+
+int32 UPPakPatcherCommandlet::PatchPakPatchWithDir(const FString& Params)
+{
+	UE_LOG(LogPakPatcherCommandlet, Display, TEXT("Begin PatchPakPatchWithDir."));
+
+	FString ResDir;
+	FString PatchDir;
+
+	if (!CheckDirParams(*Params, TEXT("ResDir="), ResDir, true))
+	{
+		return -1;
+	}
+	if (!CheckDirParams(*Params, TEXT("PatchDir="), PatchDir, true))
+	{
+		return -1;
+	}
+
+	const bool bSkipVerifyBefore = Params.Contains(TEXT("-NoVerifyBefore"));
+	const bool bSkipVerifyAfter  = Params.Contains(TEXT("-NoVerifyAfter"));
+
+	// --- Step 1: VerifyBeforePatch ---
+	if (!bSkipVerifyBefore)
+	{
+		UE_LOG(LogPakPatcherCommandlet, Display, TEXT("[PatchPakPatchWithDir] Step 1/3: VerifyBeforePatch..."));
+		const double T0 = FPlatformTime::Seconds();
+
+		// 构建 CRC 表：从 ResDir/md5_file_list.txt 读取每个文件的 CRC
+		FPUpdateManifestSummary ResSummary;
+		if (!ResSummary.Load(ResDir / FPPatchManager::GetSourceManifestFileName()))
+		{
+			UE_LOG(LogPakPatcherCommandlet, Error, TEXT("[PatchPakPatchWithDir] Failed to load ResDir manifest."));
+			return -1;
+		}
+		TMap<FString, uint32> CrcMap;
+		for (const auto& KV : ResSummary.GetManifestFileItems())
+		{
+			CrcMap.Add(KV.Key, KV.Value.CRC);
+		}
+
+		if (!FPPatchManager::Get().VerifyBeforePatch(PatchDir, CrcMap, /*bAllowMissing*/ true))
+		{
+			UE_LOG(LogPakPatcherCommandlet, Error, TEXT("[PatchPakPatchWithDir] VerifyBeforePatch FAILED."));
+			return -1;
+		}
+		UE_LOG(LogPakPatcherCommandlet, Display, TEXT("[PatchPakPatchWithDir] VerifyBeforePatch passed. (%.2fs)"),
+			FPlatformTime::Seconds() - T0);
+	}
+	else
+	{
+		UE_LOG(LogPakPatcherCommandlet, Display, TEXT("[PatchPakPatchWithDir] Step 1/3: VerifyBeforePatch SKIPPED (-NoVerifyBefore)."));
+	}
+
+	// --- Step 2: ApplyPatch ---
+	{
+		UE_LOG(LogPakPatcherCommandlet, Display, TEXT("[PatchPakPatchWithDir] Step 2/3: ApplyPatch..."));
+		const double T0 = FPlatformTime::Seconds();
+		if (!FPPatchManager::Get().ApplyPatch(ResDir, PatchDir))
+		{
+			UE_LOG(LogPakPatcherCommandlet, Error, TEXT("[PatchPakPatchWithDir] ApplyPatch FAILED."));
+			return -1;
+		}
+		UE_LOG(LogPakPatcherCommandlet, Display, TEXT("[PatchPakPatchWithDir] ApplyPatch succeeded. (%.2fs)"),
+			FPlatformTime::Seconds() - T0);
+	}
+
+	// --- Step 3: VerifyAfterPatch ---
+	if (!bSkipVerifyAfter)
+	{
+		UE_LOG(LogPakPatcherCommandlet, Display, TEXT("[PatchPakPatchWithDir] Step 3/3: VerifyAfterPatch..."));
+		const double T0 = FPlatformTime::Seconds();
+
+		// 打补丁后重新算 CRC：扫描 ResDir 下所有文件
+		TMap<FString, uint32> NewCrcMap;
+		TArray<FString> ResFiles;
+		IFileManager::Get().FindFilesRecursive(ResFiles, *ResDir, TEXT("*.*"), /*Files*/true, /*Dirs*/false);
+		for (const FString& FullPath : ResFiles)
+		{
+			const FString FileName = FPaths::GetCleanFilename(FullPath);
+			NewCrcMap.Add(FileName, FPPakPatcherUtils::CalculateFileCrc32(FullPath));
+		}
+
+		if (!FPPatchManager::Get().VerifyAfterPatch(PatchDir, NewCrcMap, /*bAllowMissing*/ true))
+		{
+			UE_LOG(LogPakPatcherCommandlet, Error, TEXT("[PatchPakPatchWithDir] VerifyAfterPatch FAILED."));
+			return -1;
+		}
+		UE_LOG(LogPakPatcherCommandlet, Display, TEXT("[PatchPakPatchWithDir] VerifyAfterPatch passed. (%.2fs)"),
+			FPlatformTime::Seconds() - T0);
+	}
+	else
+	{
+		UE_LOG(LogPakPatcherCommandlet, Display, TEXT("[PatchPakPatchWithDir] Step 3/3: VerifyAfterPatch SKIPPED (-NoVerifyAfter)."));
+	}
+
+	UE_LOG(LogPakPatcherCommandlet, Display, TEXT("Finish PatchPakPatchWithDir. ResDir:%s"), *ResDir);
 	return 0;
 }
 
@@ -506,7 +738,13 @@ int32 UPPakPatcherCommandlet::SimpleTest(const FString& Params)
 
 int32 UPPakPatcherCommandlet::UnitTest(const FString& Params)
 {
-    UE_LOG(LogPakPatcherCommandlet, Display, TEXT("Begin UnitTest."));
+	UE_LOG(LogPakPatcherCommandlet, Display, TEXT("Begin UnitTest."));
+
+	// CheckMode / Mode / Compress 等参数均来自成员 Input（已在 Main() 中解析）。
+	const EPPakUnitTestCheckMode CheckMode = Input.CheckMode;
+	UE_LOG(LogPakPatcherCommandlet, Display, TEXT("UnitTest CheckMode=%s"),
+		CheckMode == EPPakUnitTestCheckMode::PatchAndCompare ? TEXT("PatchAndCompare") :
+		CheckMode == EPPakUnitTestCheckMode::HDiffCheck      ? TEXT("HDiffCheck")      : TEXT("Both"));
 
 	FString NewDir;
 	FString OldDir;
@@ -525,17 +763,66 @@ int32 UPPakPatcherCommandlet::UnitTest(const FString& Params)
 		return -1;
 	}
 
+	const FString PatchDir = Output / TEXT("Patch");
+	const FString PatchedNew = Output / TEXT("PatchedNew");
 
-	FString PatchDir = Output / TEXT("Patch");
-	FString PatchedNew = Output / TEXT("PatchedNew");
-    if(FPPakPatcherUnitTest::Get().DirecotryDiffPatchTest(NewDir, OldDir, Output, PatchDir, PatchedNew))
+	// 回测 1：CreateDiff -> PatchPak -> 对比 MD5（已由 UnitTest 类闭环实现）
+	const bool bNeedPatchAndCompare =
+		(CheckMode == EPPakUnitTestCheckMode::PatchAndCompare) || (CheckMode == EPPakUnitTestCheckMode::Both);
+	if (bNeedPatchAndCompare)
 	{
-		UE_LOG(LogPakPatcherCommandlet, Display, TEXT("Run All Tests Successed."));
+		if (FPPakPatcherUnitTest::Get().DirecotryDiffPatchTest(NewDir, OldDir, Output, PatchDir, PatchedNew))
+		{
+			UE_LOG(LogPakPatcherCommandlet, Display, TEXT("UnitTest [PatchAndCompare] Successed."));
+		}
+		else
+		{
+			UE_LOG(LogPakPatcherCommandlet, Error, TEXT("UnitTest [PatchAndCompare] Failed."));
+			return -1;
+		}
 	}
-	else
+
+	// 回测 2：HDiff CheckDiff 接口 —— 对 PatchDir 下每个 .patch 调一次 FPResPatcher::CheckDiff
+	const bool bNeedHDiffCheck =
+		(CheckMode == EPPakUnitTestCheckMode::HDiffCheck) || (CheckMode == EPPakUnitTestCheckMode::Both);
+	if (bNeedHDiffCheck)
 	{
-		UE_LOG(LogPakPatcherCommandlet, Error, TEXT("Run All Tests Failed."));
-		return -1;
+		FPResPatcher ResPatcher;
+		TArray<FString> PatchFiles;
+		IFileManager::Get().FindFilesRecursive(PatchFiles, *PatchDir, TEXT("*.patch"), true, false);
+		int32 CheckedCount = 0;
+		for (const FString& PatchFile : PatchFiles)
+		{
+			const FString RelPath = PatchFile.RightChop(PatchDir.Len()).TrimChar(TEXT('/')).TrimChar(TEXT('\\'));
+			FString RelNoExt = RelPath;
+			RelNoExt.RemoveFromEnd(TEXT(".patch"));
+			const FString NewPakFile = NewDir / RelNoExt;
+			const FString OldPakFile = OldDir / RelNoExt;
+
+			if (!IFileManager::Get().FileExists(*NewPakFile) || !IFileManager::Get().FileExists(*OldPakFile))
+			{
+				UE_LOG(LogPakPatcherCommandlet, Warning, TEXT("UnitTest [HDiffCheck] skip: missing new/old. patch=%s"), *PatchFile);
+				continue;
+			}
+
+			FPResPatchDataPtr Patch = MakeShareable(new FPResPatchData());
+			if (!Patch->LoadFromFile(PatchFile))
+			{
+				UE_LOG(LogPakPatcherCommandlet, Error, TEXT("UnitTest [HDiffCheck] load patch failed for %s"), *PatchFile);
+				return -1;
+			}
+			if (!ResPatcher.CheckDiff(NewPakFile, OldPakFile, Patch))
+			{
+				UE_LOG(LogPakPatcherCommandlet, Error, TEXT("UnitTest [HDiffCheck] CheckDiff failed for %s"), *PatchFile);
+				return -1;
+			}
+			++CheckedCount;
+		}
+		UE_LOG(LogPakPatcherCommandlet, Display, TEXT("UnitTest [HDiffCheck] Successed. Checked=%d"), CheckedCount);
 	}
+
+	UE_LOG(LogPakPatcherCommandlet, Display, TEXT("Run All Tests Successed."));
 	return 0;
 }
+
+

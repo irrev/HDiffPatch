@@ -24,3 +24,4 @@ builds/vc/ipch/
 .vs/
 *.user
 x64/
+UEPlugins/PPakPatcher/Source/PPakPatcher/ThirdParty

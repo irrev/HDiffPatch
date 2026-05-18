@@ -2,6 +2,7 @@
 #include "Data/PPakPatcherDataType.h"
 
 #include "PPakPatcherModule.h"
+#include "PPakPatcherSettings.h"
 
 #include "HAL/FileManager.h"
 
@@ -116,6 +117,75 @@ int32 FPPakPatcherUtils::CalculateFileCrc32(const FString& InFilename, TArray<ui
 FMD5Hash FPPakPatcherUtils::CalculateFileMD5(const FString& InFilename, TArray<uint8>& Buffer)
 {
 	return FMD5Hash::HashFile(*InFilename, &Buffer);
+}
+
+FString FPPakPatcherUtils::CalculateFileMD5String(const FString& InFilename)
+{
+	if (InFilename.IsEmpty() || !IFileManager::Get().FileExists(*InFilename))
+	{
+		return FString();
+	}
+	return LexToString(FMD5Hash::HashFile(*InFilename));
+}
+
+uint32 FPPakPatcherUtils::CalculateFileCrc32(const FString& InFilename)
+{
+	if (InFilename.IsEmpty() || !IFileManager::Get().FileExists(*InFilename))
+	{
+		return 0;
+	}
+	TArray<uint8> Buffer;
+	return static_cast<uint32>(CalculateFileCrc32(InFilename, Buffer));
+}
+
+bool FPPakPatcherUtils::VerifyFileHashByCheckType(const FString& InFilename,
+	const FString& ExpectedMD5, uint32 ExpectedCrc32,
+	const TCHAR* InContextTagForLog)
+{
+	const TCHAR* Tag = InContextTagForLog ? InContextTagForLog : TEXT("VerifyFileHash");
+	const EPPakCheckFileHashType HashType = UPPakPatcherSettings::Get().CheckFileHashType;
+
+	switch (HashType)
+	{
+	case EPPakCheckFileHashType::None:
+		return true;
+
+	case EPPakCheckFileHashType::Crc32:
+	{
+		// 期望 CRC32 缺失（如旧补丁未带）则跳过
+		if (ExpectedCrc32 == 0)
+		{
+			return true;
+		}
+		const uint32 ActualCrc32 = CalculateFileCrc32(InFilename);
+		if (ActualCrc32 != ExpectedCrc32)
+		{
+			UE_LOG(LogPPakPacher, Error, TEXT("[%s] File CRC32 mismatch. Expect:0x%08X Actual:0x%08X File:%s"),
+				Tag, ExpectedCrc32, ActualCrc32, *InFilename);
+			return false;
+		}
+		return true;
+	}
+
+	case EPPakCheckFileHashType::MD5:
+	{
+		if (ExpectedMD5.IsEmpty())
+		{
+			return true;
+		}
+		const FString ActualMD5 = CalculateFileMD5String(InFilename);
+		if (ActualMD5.IsEmpty() || ActualMD5 != ExpectedMD5)
+		{
+			UE_LOG(LogPPakPacher, Error, TEXT("[%s] File MD5 mismatch. Expect:%s Actual:%s File:%s"),
+				Tag, *ExpectedMD5, *ActualMD5, *InFilename);
+			return false;
+		}
+		return true;
+	}
+
+	default:
+		return true;
+	}
 }
 
 int64 FPPakPatcherUtils::GetFileSize(const FString& InFilename)

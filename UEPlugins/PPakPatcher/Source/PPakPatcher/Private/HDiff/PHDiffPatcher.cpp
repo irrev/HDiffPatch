@@ -1,4 +1,5 @@
 #include "PHDiffPatcher.h"
+#include "PPakPatcherSettings.h"
 
 #if USE_HDIFFPATCH
 #include <HDiffPatch.h>
@@ -6,7 +7,13 @@
 
 FPHDiffPatcher::FPHDiffPatcher()
 {
-
+	// 不在构造函数中调 ApplySettingsFromConfig()——
+	// Module::StartupModule 阶段 CDO (GetDefault<UPPakPatcherSettings>) 可能尚未初始化，
+	// 调用会导致 EXCEPTION_ACCESS_VIOLATION 崩溃。
+	// Settings 会在以下时机被加载：
+	//   1. Commandlet Main 调 Input.ApplyOverridesToSettings() 后显式调 ReloadSettingsFromConfig()
+	//   2. 首次调用 CreateDiff/Patch 等 API 时通过 EnsureSettingsLoaded() 懒加载
+	bSettingsLoaded = false;
 }
 
 FPHDiffPatcher::~FPHDiffPatcher()
@@ -14,9 +21,24 @@ FPHDiffPatcher::~FPHDiffPatcher()
 
 }
 
+
+void FPHDiffPatcher::ApplySettingsFromConfig()
+{
+	if(const UPPakPatcherSettings* Config = GetDefault<UPPakPatcherSettings>())
+	{
+		bUseSingleCompressMode = Config->bUseSingleCompressMode;
+		MinSingleMatchScore = Config->MinSingleMatchScore;
+		PatchStepMemSize = Config->PatchStepMemSize;
+		bUseBigCacheMatch = Config->bUseBigCacheMatch;
+		ThreadNum = Config->ThreadNum;
+		bSettingsLoaded = true;
+	}
+}
+
 bool FPHDiffPatcher::CreateDiff(const TArray<uint8>& InNew, const TArray<uint8>& InOld, TArray<uint8>& OutDiff,
 	EPakPatchCompressType InCompressType/* = EPakPatchCompressType::None*/)
 {
+	EnsureSettingsLoaded();
 #if USE_HDIFFPATCH
 	std::vector<unsigned char> StdTmp;
 	if (bUseSingleCompressMode)
@@ -53,6 +75,7 @@ bool FPHDiffPatcher::CreateDiff(const TArray<uint8>& InNew, const TArray<uint8>&
 bool FPHDiffPatcher::CreateDiff(uint8* InNew, uint64 InNewSize, uint8* InOld, uint64 InOldSize, TArray<uint8>& OutDiff,
 	EPakPatchCompressType InCompressType /* = EPakPatchCompressType::None*/)
 {
+	EnsureSettingsLoaded();
 #if USE_HDIFFPATCH
 	std::vector<unsigned char> StdTmp;
 

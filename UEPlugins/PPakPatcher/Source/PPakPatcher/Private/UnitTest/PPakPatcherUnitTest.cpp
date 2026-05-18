@@ -2,8 +2,10 @@
 #include "Misc/LazySingleton.h"
 #include "HAL/FileManager.h"
 #include "Misc/FileHelper.h"
+#include "Misc/SecureHash.h"
 
 
+#include "Patcher/FPResPatcher.h"
 #include "Utils/PPakPatcherUtils.h"
 
 
@@ -15,20 +17,24 @@ FPPakPatcherUnitTest& FPPakPatcherUnitTest::Get()
 bool FPPakPatcherUnitTest::SimpleTest()
 {
 	FString TestSampleDir = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir() / TEXT("Plugins/PPakPatcher/Content/TestSample"));
-	const FString NewFile = TestSampleDir / TEXT("New/pakchunk2600_0.ucas");
-	const FString OldFile = TestSampleDir / TEXT("Old/pakchunk2600_0.ucas");
+	// 用 .pak 作为测试入口；FPResPatcher 会自动联动同伴 .utoc/.ucas 处理 IoStore。
+	// 直接传 .ucas/.utoc 现在会被 FPResPatcher 拒绝（必须传 .pak）。
+	const FString NewFile = TestSampleDir / TEXT("New/pakchunk2600_0.pak");
+	const FString OldFile = TestSampleDir / TEXT("Old/pakchunk2600_0.pak");
 	bool bSuccess = true;
 
 	bSuccess &= bUseBinaryPatcher ? TestBinaryPatcher(NewFile, OldFile) : true;
-	bSuccess &= bUsePakPatcher ? TestPakPatcher(NewFile, OldFile) : true;
+	bSuccess &= bUsePakPatcher    ? TestPakPatcher(NewFile, OldFile)    : true;
 
-	return true;
+	UE_LOG(LogPPakPacher, Display, TEXT("FPPakPatcherUnitTest::SimpleTest - Done. bSuccess=%s"),
+		bSuccess ? TEXT("true") : TEXT("false"));
+	return bSuccess;
 }
 
 bool FPPakPatcherUnitTest::DirecotryDiffPatchTest(const FString& InNewDir, const FString& InOldDir, const FString& InOutputDir, const FString& InPatchDir, const FString& InNewPatchedDir)
 {
 	TArray<FPFileCompareInfo> DirCompareInfo = FPPakPatcherUtils::CompareDirectories(InNewDir, InOldDir);
-	IPBinPatcher* BinPatcher = IPPakPatcherModule::Get().GetBinPatcher();
+	FPResPatcher ResPatcher;
 
 	struct FPatchStats
 	{
@@ -101,10 +107,9 @@ bool FPPakPatcherUnitTest::DirecotryDiffPatchTest(const FString& InNewDir, const
 			int32 aaa = 1;
 		}
 
-		auto TestPatch = [&](FString TestName, bool bUseSingleCompressMode, EPakPatchCompressType CompressType) -> bool
+		auto TestPatch = [&](FString TestName, EPakPatchCompressType CompressType) -> bool
 			{
 				UE_LOG(LogPPakPacher, Display, TEXT("Test BinaryPatch. TestName:%s"), *TestName);
-				BinPatcher->bUseSingleCompressMode = bUseSingleCompressMode;
 
 				FPatchStats Stats;
 				Stats.FileName = Info.Filename; // Use full relative path
@@ -112,89 +117,81 @@ bool FPPakPatcherUnitTest::DirecotryDiffPatchTest(const FString& InNewDir, const
 				Stats.NewSize = NewData.Num();
 				Stats.OldSize = OldData.Num();
 
-				TArray<uint8> DiffData;
+				// Patch 输出路径（用于 CreateDiff 直接落盘）
+				FString PatchFile;
+				if (!InPatchDir.IsEmpty())
+				{
+					PatchFile = InPatchDir / TestName / Info.Filename + TEXT(".patch");
+					FString PatchFileDir = FPaths::GetPath(PatchFile);
+					IFileManager::Get().MakeDirectory(*PatchFileDir, true);
+				}
+
+				// CreateDiff : 内部已负责写补丁文件
+				FPResPatchDataPtr PatchData;
 				double StartTime = FPlatformTime::Seconds();
-				BinPatcher->CreateDiff(NewData.GetData(), NewData.Num(), OldData.GetData(), OldData.Num(), DiffData, CompressType);
+				const bool bCreateOk = ResPatcher.CreateDiff(PatchFile, NewFile, OldFile, PatchData,
+					EPPakPatchMode::PakAware, CompressType);
 				Stats.Duration_CreateDiff = (FPlatformTime::Seconds() - StartTime);
 				UE_LOG(LogPPakPacher, Display, TEXT("  CreateDiff Cost: %.4f s"), Stats.Duration_CreateDiff);
+				if (!bCreateOk)
+				{
+					UE_LOG(LogPPakPacher, Error, TEXT("CreateDiff Failed."));
+					return false;
+				}
 
+				// CheckDiff
 				StartTime = FPlatformTime::Seconds();
-				bool bCheckSuccess = BinPatcher->CheckDiff(NewData.GetData(), NewData.Num(), OldData.GetData(), OldData.Num(), DiffData.GetData(), DiffData.Num());
+				const bool bCheckSuccess = ResPatcher.CheckDiff(NewFile, OldFile, PatchData);
 				Stats.Duration_CheckDiff = (FPlatformTime::Seconds() - StartTime);
 				UE_LOG(LogPPakPacher, Display, TEXT("  CheckDiff Cost: %.4f s"), Stats.Duration_CheckDiff);
-
 				if (!bCheckSuccess)
 				{
 					UE_LOG(LogPPakPacher, Error, TEXT("CheckDiff Failed."));
 					return false;
 				}
 
-				TArray64<uint8> PatchedData;
-				PatchedData.SetNumZeroed(NewData.Num());
+				// PatchDiff : 产出 PatchedFile（直接落盘）
+				FString NewPatchedFile;
+				if (!InNewPatchedDir.IsEmpty())
+				{
+					NewPatchedFile = InNewPatchedDir / TestName / Info.Filename;
+					FString NewPatchedFileDir = FPaths::GetPath(NewPatchedFile);
+					IFileManager::Get().MakeDirectory(*NewPatchedFileDir, true);
+				}
+				else
+				{
+					NewPatchedFile = FPaths::ChangeExtension(NewFile, TEXT("patched"));
+				}
 
 				StartTime = FPlatformTime::Seconds();
-				BinPatcher->Patch(PatchedData.GetData(), PatchedData.Num(), OldData.GetData(), OldData.Num(), DiffData.GetData(), DiffData.Num());
+				const bool bPatchOk = ResPatcher.PatchDiff(NewPatchedFile, OldFile, PatchData);
 				Stats.Duration_Patch = (FPlatformTime::Seconds() - StartTime);
 				UE_LOG(LogPPakPacher, Display, TEXT("  Patch Cost: %.4f s"), Stats.Duration_Patch);
+				if (!bPatchOk)
+				{
+					UE_LOG(LogPPakPacher, Error, TEXT("Patch Failed."));
+					return false;
+				}
 
+				// MemCompare : 用 MD5 文件比较代替内存 memcmp
 				StartTime = FPlatformTime::Seconds();
-				bool bIsSame = FMemory::Memcmp(PatchedData.GetData(), NewData.GetData(), PatchedData.Num()) == 0;
+				const FMD5Hash NewHash = FMD5Hash::HashFile(*NewFile);
+				const FMD5Hash PatchedHash = FMD5Hash::HashFile(*NewPatchedFile);
+				const bool bIsSame = LexToString(NewHash) == LexToString(PatchedHash);
 				Stats.Duration_MemCompare = (FPlatformTime::Seconds() - StartTime);
 				UE_LOG(LogPPakPacher, Display, TEXT("  MemCompare Cost: %.4f s"), Stats.Duration_MemCompare);
-
 				if (!bIsSame)
 				{
 					UE_LOG(LogPPakPacher, Error, TEXT("Memory Compare Failed."));
 					return false;
 				}
 
-				int64 PatchFileSize = 0;
-				if (!InPatchDir.IsEmpty())
-				{
-					// Use Info.Filename to keep directory structure, avoid name conflict.
-					FString PatchFile = InPatchDir / TestName / Info.Filename + TEXT(".patch");
-					FString PatchFileDir = FPaths::GetPath(PatchFile);
-					IFileManager::Get().MakeDirectory(*PatchFileDir, true);
+				// CreateDiff / PatchDiff 已经负责落盘，额外的写补丁/写 patched 阶段耗时合并为 0。
+				Stats.Duration_WritePatchFile = 0;
+				Stats.Duration_WritePatchedFile = 0;
 
-					StartTime = FPlatformTime::Seconds();
-					FArchive* Writer = IFileManager::Get().CreateFileWriter(*PatchFile);
-					if (Writer)
-					{
-						Writer->Serialize(DiffData.GetData(), DiffData.Num());
-						Writer->Close();
-
-						PatchFileSize = FPPakPatcherUtils::GetFileSize(PatchFile);
-					}
-					else
-					{
-						UE_LOG(LogPPakPacher, Error, TEXT("Fail to create patch writer. file: %s"), *PatchFile);
-					}
-					Stats.Duration_WritePatchFile = (FPlatformTime::Seconds() - StartTime);
-					UE_LOG(LogPPakPacher, Display, TEXT("  WritePatchFile Cost: %.4f s"), Stats.Duration_WritePatchFile);
-				}
-
-				if (!InNewPatchedDir.IsEmpty())
-				{
-					FString NewPatchedFile = InNewPatchedDir / TestName / Info.Filename;
-					FString NewPatchedFileDir = FPaths::GetPath(NewPatchedFile);
-					IFileManager::Get().MakeDirectory(*NewPatchedFileDir, true);
-
-					StartTime = FPlatformTime::Seconds();
-					FArchive* Writer = IFileManager::Get().CreateFileWriter(*NewPatchedFile);
-					if (Writer)
-					{
-						Writer->Serialize(PatchedData.GetData(), PatchedData.Num());
-						Writer->Close();
-					}
-					else
-					{
-						UE_LOG(LogPPakPacher, Error, TEXT("Fail to create new patched file writer. file: %s"), *NewPatchedFile);
-					}
-					Stats.Duration_WritePatchedFile = (FPlatformTime::Seconds() - StartTime);
-					UE_LOG(LogPPakPacher, Display, TEXT("  WritePatchedFile Cost: %.4f s"), Stats.Duration_WritePatchedFile);
-				}
-
-				Stats.PatchSize = DiffData.Num();
+				const int64 PatchFileSize = PatchFile.IsEmpty() ? 0 : FPPakPatcherUtils::GetFileSize(PatchFile);
+				Stats.PatchSize = PatchFileSize; // 走 FPResPatcher 后不再单独持有内存 diff 字节，以补丁文件大小近似 PatchSize
 				Stats.PatchFileSize = PatchFileSize;
 				AllStats.Add(Stats);
 				return true;
@@ -216,7 +213,7 @@ bool FPPakPatcherUnitTest::DirecotryDiffPatchTest(const FString& InNewDir, const
 			{
 				CompressTypeStr = CompressTypeStr.RightChop(ScopeIndex + 2);
 			}
-			bSuccess &= TestPatch(CompressTypeStr, true, CompressType);
+			bSuccess &= TestPatch(CompressTypeStr, CompressType);
 		}
 	}
 
@@ -307,42 +304,37 @@ bool FPPakPatcherUnitTest::TestBinaryPatcher(const FString& InNewFile, const FSt
 	UE_LOG(LogPPakPacher, Display, TEXT("Begin TestBinaryPatch. NewPakFile:%s, OldPakFile:%s"), *InNewFile, *InOldFile);
 	const double StartTime = FPlatformTime::Seconds();
 
-	TArray64<uint8> OldData;
-	TArray64<uint8> NewData;
+	FPResPatcher ResPatcher;
 
-	if (!FPPakPatcherUtils::LoadFileToBuffer(InOldFile, OldData))
+	const FString PatchFile = FPaths::ChangeExtension(InOldFile, TEXT("patch"));
+	const FString PatchedFile = FPaths::ChangeExtension(InNewFile, TEXT("patched"));
+
+	// CreateDiff
+	FPResPatchDataPtr PatchData;
+	if (!ResPatcher.CreateDiff(PatchFile, InNewFile, InOldFile, PatchData))
 	{
-		UE_LOG(LogPPakPacher, Error, TEXT("Error opening old file.%s"), *InOldFile);
+		UE_LOG(LogPPakPacher, Error, TEXT("CreateDiff Failed."));
 		return false;
 	}
 
-	if (!FPPakPatcherUtils::LoadFileToBuffer(InNewFile, NewData))
-	{
-		UE_LOG(LogPPakPacher, Error, TEXT("Error opening old file.%s"), *InOldFile);
-		return false;
-	}
-	IPBinPatcher* BinPatcher = IPPakPatcherModule::Get().GetBinPatcher();
-
-	TArray<uint8> DiffData;
-	BinPatcher->CreateDiff(NewData.GetData(), NewData.Num(), OldData.GetData(), OldData.Num(), DiffData);
-
-	bool bCheckSuccess = BinPatcher->CheckDiff(NewData.GetData(), NewData.Num(), OldData.GetData(), OldData.Num(), DiffData.GetData(), DiffData.Num());
-	if (bCheckSuccess)
-	{
-		UE_LOG(LogPPakPacher, Display, TEXT("CheckDiff Success."));
-	}
-	else
+	// CheckDiff
+	if (!ResPatcher.CheckDiff(InNewFile, InOldFile, PatchData))
 	{
 		UE_LOG(LogPPakPacher, Error, TEXT("CheckDiff Failed."));
 		return false;
 	}
+	UE_LOG(LogPPakPacher, Display, TEXT("CheckDiff Success."));
 
-	TArray64<uint8> PatchedData;
-	PatchedData.SetNumZeroed(NewData.Num());
-	BinPatcher->Patch(PatchedData.GetData(), PatchedData.Num(), OldData.GetData(), OldData.Num(), DiffData.GetData(), DiffData.Num());
+	// PatchDiff : 产出 PatchedFile，再对比 MD5
+	if (!ResPatcher.PatchDiff(PatchedFile, InOldFile, PatchData))
+	{
+		UE_LOG(LogPPakPacher, Error, TEXT("PatchDiff Failed."));
+		return false;
+	}
 
-	bool bIsSame = FMemory::Memcmp(PatchedData.GetData(), NewData.GetData(), PatchedData.Num()) == 0;
-	if (bIsSame)
+	const FMD5Hash NewHash = FMD5Hash::HashFile(*InNewFile);
+	const FMD5Hash PatchedHash = FMD5Hash::HashFile(*PatchedFile);
+	if (LexToString(NewHash) == LexToString(PatchedHash))
 	{
 		UE_LOG(LogPPakPacher, Display, TEXT("Memory Compare Success."));
 	}
@@ -363,40 +355,26 @@ bool FPPakPatcherUnitTest::TestPakPatcher(const FString& InNewPakFile, const FSt
 	UE_LOG(LogPPakPacher, Display, TEXT("Begin TestPakPatch. NewPakFile:%s, OldPakFile:%s"), *InNewPakFile, *InOldPakFile);
 	const double StartTime = FPlatformTime::Seconds();
 
-	IPPakPatcher* PakPatcher = IPPakPatcherModule::Get().GetPakPatcher();
+	FPResPatcher ResPatcher;
 
-	FPPakFileDataPtr OldPakFile = MakeShareable(new FPPakFileData());
-	FPPakFileDataPtr NewPakFile = MakeShareable(new FPPakFileData());
-
-	if (!OldPakFile->LoadFromFile(InOldPakFile))
-	{
-		UE_LOG(LogPPakPacher, Error, TEXT("Error load old pak.%s"), *InOldPakFile);
-		return false;
-	}
-
-	if (!NewPakFile->LoadFromFile(InNewPakFile))
-	{
-		UE_LOG(LogPPakPacher, Error, TEXT("Error load new pak.%s"), *InNewPakFile);
-		return false;
-	}
 	FString PathPart, FilenamePart, ExtPart;
 	FPaths::Split(InOldPakFile, PathPart, FilenamePart, ExtPart);
 	FString PatchFileName = FPaths::Combine(PathPart, FilenamePart) + TEXT(".patch");
 
 	// step 1: generate patch data.
-	FPPakPatchDataPtr PatchData;
-	if (PakPatcher->CreatePakDiff(PatchFileName, NewPakFile, OldPakFile, PatchData))
+	FPResPatchDataPtr PatchData;
+	if (ResPatcher.CreateDiff(PatchFileName, InNewPakFile, InOldPakFile, PatchData))
 	{
-		UE_LOG(LogPPakPacher, Display, TEXT("CreatePakDiff Success."));
+		UE_LOG(LogPPakPacher, Display, TEXT("CreateDiff Success."));
 	}
 	else
 	{
-		UE_LOG(LogPPakPacher, Error, TEXT("CreatePakDiff Failed."));
+		UE_LOG(LogPPakPacher, Error, TEXT("CreateDiff Failed."));
 		return false;
 	}
 
 	// step 2: save patch data to file.
-	if (PatchData->IsUsePrecache())
+	if (PatchData.IsValid() && PatchData->IsUsePrecache())
 	{
 		if (PatchData->SaveToFile(PatchFileName))
 		{
@@ -411,7 +389,7 @@ bool FPPakPatcherUnitTest::TestPakPatcher(const FString& InNewPakFile, const FSt
 
 
 	// step 3: load patch data.
-	FPPakPatchDataPtr NewPatchData = MakeShareable(new FPPakPatchData());
+	FPResPatchDataPtr NewPatchData = MakeShareable(new FPResPatchData());
 	if (NewPatchData->LoadFromFile(PatchFileName))
 	{
 		UE_LOG(LogPPakPacher, Display, TEXT("LoadFromFile Success."));
@@ -422,11 +400,11 @@ bool FPPakPatcherUnitTest::TestPakPatcher(const FString& InNewPakFile, const FSt
 		return false;
 	}
 
-	if (NewPatchData->IsEqual(*PatchData.Get()))
+	if (PatchData.IsValid() && NewPatchData->IsEqual(*PatchData.Get()))
 	{
 		UE_LOG(LogPPakPacher, Display, TEXT("Check Save & Load Patch Data Success."));
 	}
-	else
+	else if (PatchData.IsValid())
 	{
 		UE_LOG(LogPPakPacher, Error, TEXT("The loaded data is inconsistent with the saved data."));
 		return false;
@@ -436,7 +414,7 @@ bool FPPakPatcherUnitTest::TestPakPatcher(const FString& InNewPakFile, const FSt
 	//NewPatchData->SaveToFile(FPaths::Combine(PathPart, TEXT("tmp")) + TEXT(".patch"));
 
 	// step 4: check patch.
-	if (PakPatcher->CheckPakDiff(NewPakFile, OldPakFile, NewPatchData))
+	if (ResPatcher.CheckDiff(InNewPakFile, InOldPakFile, NewPatchData))
 	{
 		UE_LOG(LogPPakPacher, Display, TEXT("CheckDiff Pak Success."));
 	}
@@ -448,7 +426,7 @@ bool FPPakPatcherUnitTest::TestPakPatcher(const FString& InNewPakFile, const FSt
 
 	// step 5: patch old pak file to new.
 	FString PatchedPakFilename = FPaths::ChangeExtension(InNewPakFile, TEXT("newpak"));
-	if (PakPatcher->PatchPak(PatchedPakFilename, OldPakFile, NewPatchData))
+	if (ResPatcher.PatchDiff(PatchedPakFilename, InOldPakFile, NewPatchData))
 	{
 		UE_LOG(LogPPakPacher, Display, TEXT("Patch Pak Success."));
 	}
@@ -459,22 +437,12 @@ bool FPPakPatcherUnitTest::TestPakPatcher(const FString& InNewPakFile, const FSt
 	}
 
 	// step 6: compare new pak file and patched pak files.
-	FPPakFileDataPtr PatchedPakFile = MakeShareable(new FPPakFileData());
-	PatchedPakFile->LoadFromFile(PatchedPakFilename);
 	bool bIsEqual = false;
 
-	FString NewMD5 = NewPakFile->GetPakFileMD5();
-	FString PatchedMD5 = PatchedPakFile->GetPakFileMD5();
-	if (NewMD5.IsEmpty())
-	{
-		FMD5Hash Hash = FMD5Hash::HashFile(*NewPakFile->PakFilename);
-		NewMD5 = LexToString(Hash);
-	}
-	if (PatchedMD5.IsEmpty())
-	{
-		FMD5Hash Hash = FMD5Hash::HashFile(*PatchedPakFile->PakFilename);
-		PatchedMD5 = LexToString(Hash);
-	}
+	const FMD5Hash NewHash = FMD5Hash::HashFile(*InNewPakFile);
+	const FMD5Hash PatchedHash = FMD5Hash::HashFile(*PatchedPakFilename);
+	const FString NewMD5 = LexToString(NewHash);
+	const FString PatchedMD5 = LexToString(PatchedHash);
 	if (NewMD5 == PatchedMD5)
 	{
 		UE_LOG(LogPPakPacher, Display, TEXT("Compare Patched Pak File with new Success."));

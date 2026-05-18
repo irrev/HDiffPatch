@@ -4,13 +4,42 @@
 #include "CoreTypes.h"
 #include "UObject/NameTypes.h"
 #include "Engine/EngineTypes.h"
-#include "IPBinPatcher.h"
+#include "Patcher/IPBinPatcher.h"
 
 class FPHDiffPatcher : public IPBinPatcher
 {
 public:
+
+	bool bUseSingleCompressMode = true;
+
+	// default 6, bin: 0--4  text: 4--9
+	int32 MinSingleMatchScore = 6;
+
+	// big cache max used O(oldSize) memory, match speed faster, but build big cache slow 
+	bool bUseBigCacheMatch = false;
+
+	int32 ThreadNum = 1;
+
+	//patchStepMemSize: default 256k, recommended 64k,2m etc...
+	int32 PatchStepMemSize = 262144;// 1024 * 256;
+
+	bool bSettingsLoaded = false;
+
 	FPHDiffPatcher();
 	virtual ~FPHDiffPatcher();
+
+	void ApplySettingsFromConfig();
+
+	virtual void ReloadSettingsFromConfig() override { ApplySettingsFromConfig(); }
+
+	/** 确保 Settings 已从 Config 加载过（懒加载，首次调用时才读 CDO）。 */
+	void EnsureSettingsLoaded()
+	{
+		if (!bSettingsLoaded)
+		{
+			ApplySettingsFromConfig();
+		}
+	}
 
 	bool CreateDiff(const TArray<uint8>& InNew, const TArray<uint8>& InOld, TArray<uint8>& OutDiff,
 		EPakPatchCompressType InCompressType = EPakPatchCompressType::None) override;

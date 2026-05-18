@@ -7,9 +7,14 @@
 #include "Misc/ConfigCacheIni.h"
 #include "Misc/Base64.h"
 #include "Misc/CommandLine.h"
+#include "Misc/Paths.h"
 #include "RSA.h"
 
 #include "HAL/FileManager.h"
+
+#include "Dom/JsonObject.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
 
 FPPakPatcherKeyChainHelper& FPPakPatcherKeyChainHelper::Get()
 {
@@ -86,24 +91,43 @@ void FPPakPatcherKeyChainHelper::LoadKeyChainInEditor()
 
 bool FPPakPatcherKeyChainHelper::LoadKeyChainFromFile()
 {
-	// 编辑器模式下，可以通过Crypto.json来获取。构建后会在: Saved/Cooked/[Platform]/[Game]/Metadata/Crypto.json
-
-	// First, try and parse the keys from a supplied crypto key cache file
+	// 编辑器/Commandlet 模式下，可以通过 Crypto.json 来获取。构建后会在: Saved/Cooked/[Platform]/[Game]/Metadata/Crypto.json
+	// 命令行用法（参考引擎）：
+	//   -cryptokeys="<path/to/Crypto.json>"
 	const TCHAR* CmdLine = FCommandLine::Get();
 	FString CryptoKeysCacheFilename;
-	FParse::Value(CmdLine, TEXT("cryptokeys="), CryptoKeysCacheFilename);
+	if (!FParse::Value(CmdLine, TEXT("cryptokeys="), CryptoKeysCacheFilename))
+	{
+		return false;
+	}
 	if (CryptoKeysCacheFilename.IsEmpty())
 	{
 		return false;
 	}
 
-	if (IFileManager::Get().FileExists(*CryptoKeysCacheFilename))
+	// 路径标准化：相对路径相对于项目根（FPaths::ProjectDir）解析
+	if (FPaths::IsRelative(CryptoKeysCacheFilename))
 	{
-		UE_LOG(LogPPakPacher, Display, TEXT("Parsing crypto keys from a crypto key cache file"));
-		KeyChainUtilities::LoadKeyChainFromFile(CryptoKeysCacheFilename, KeyChain);
-		return true;
+		CryptoKeysCacheFilename = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir(), CryptoKeysCacheFilename);
 	}
-	return true;
+	FPaths::MakeStandardFilename(CryptoKeysCacheFilename);
+
+	if (!IFileManager::Get().FileExists(*CryptoKeysCacheFilename))
+	{
+		UE_LOG(LogPPakPacher, Error, TEXT("FPPakPatcherKeyChainHelper::LoadKeyChainFromFile - cryptokeys file not found: %s"),
+			*CryptoKeysCacheFilename);
+		return false;
+	}
+
+	UE_LOG(LogPPakPacher, Display, TEXT("FPPakPatcherKeyChainHelper::LoadKeyChainFromFile - Parsing crypto keys from: %s"),
+		*CryptoKeysCacheFilename);
+	KeyChainUtilities::LoadKeyChainFromFile(CryptoKeysCacheFilename, KeyChain);
+
+	const int32 NumEncKeys = KeyChain.GetEncryptionKeys().Num();
+	const bool bHasSign = (KeyChain.GetSigningKey() != InvalidRSAKeyHandle);
+	UE_LOG(LogPPakPacher, Display, TEXT("FPPakPatcherKeyChainHelper::LoadKeyChainFromFile - Loaded. EncryptionKeys=%d, HasSigningKey=%s"),
+		NumEncKeys, bHasSign ? TEXT("true") : TEXT("false"));
+	return NumEncKeys > 0 || bHasSign;
 }
 
 
@@ -249,6 +273,72 @@ bool FPPakPatcherKeyChainHelper::LoadKeyChainFromCommandline()
 
 	UE_LOG(LogPPakPacher, Display, TEXT("Using command line for crypto configuration"));
 
+	bool bAnyLoaded = false;
+
+	// -------------------------------------------------------------
+	// -SignKey="<path/to/SignKey.json>"
+	//   独立的 RSA 签名 key JSON 文件（与 -cryptokeys 解耦，便于只签名场景）。
+	//   JSON 形如：
+	//     {
+	//       "PublicKey":  { "Exponent": "<base64>", "Modulus": "<base64>" },
+	//       "PrivateKey": { "Exponent": "<base64>", "Modulus": "<base64>" }
+	//     }
+	// -------------------------------------------------------------
+	{
+		FString SignKeyFile;
+		if (FParse::Value(CmdLine, TEXT("SignKey="), SignKeyFile) && !SignKeyFile.IsEmpty())
+		{
+			if (FPaths::IsRelative(SignKeyFile))
+			{
+				SignKeyFile = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir(), SignKeyFile);
+			}
+			FPaths::MakeStandardFilename(SignKeyFile);
+
+			if (!IFileManager::Get().FileExists(*SignKeyFile))
+			{
+				UE_LOG(LogPPakPacher, Error,
+					TEXT("FPPakPatcherKeyChainHelper::LoadKeyChainFromCommandline - -SignKey file not found: %s"),
+					*SignKeyFile);
+			}
+			else
+			{
+				TUniquePtr<FArchive> File(IFileManager::Get().CreateFileReader(*SignKeyFile));
+				if (File.IsValid())
+				{
+					TSharedPtr<FJsonObject> RootObject;
+					TSharedRef<TJsonReader<UTF8CHAR>> Reader = TJsonReaderFactory<UTF8CHAR>::Create(File.Get());
+					if (FJsonSerializer::Deserialize(Reader, RootObject) && RootObject.IsValid())
+					{
+						FRSAKeyHandle SigningKey = KeyChainUtilities::ParseRSAKeyFromJson(RootObject);
+						if (SigningKey != InvalidRSAKeyHandle)
+						{
+							KeyChain.SetSigningKey(SigningKey);
+							UE_LOG(LogPPakPacher, Display,
+								TEXT("Parsed RSA signing key from -SignKey: %s"), *SignKeyFile);
+							bAnyLoaded = true;
+						}
+						else
+						{
+							UE_LOG(LogPPakPacher, Error,
+								TEXT("FPPakPatcherKeyChainHelper::LoadKeyChainFromCommandline - Failed to parse RSA key from -SignKey: %s. ")
+								TEXT("Expected JSON: { 'PublicKey': {'Exponent','Modulus'}, 'PrivateKey': {'Exponent','Modulus'} } (all base64)."),
+								*SignKeyFile);
+						}
+					}
+					else
+					{
+						UE_LOG(LogPPakPacher, Error,
+							TEXT("FPPakPatcherKeyChainHelper::LoadKeyChainFromCommandline - Failed to deserialize JSON: %s"),
+							*SignKeyFile);
+					}
+				}
+			}
+		}
+	}
+
+	// -------------------------------------------------------------
+	// -aes="<32 bytes ANSI>"  legacy AES key
+	// -------------------------------------------------------------
 	FString EncryptionKeyString;
 	FParse::Value(CmdLine, TEXT("aes="), EncryptionKeyString, false);
 
@@ -265,7 +355,7 @@ bool FPPakPatcherKeyChainHelper::LoadKeyChainFromCommandline()
 		if (EncryptionKeyString.Len() < RequiredKeyLength)
 		{
 			UE_LOG(LogPPakPacher, Error, TEXT("AES encryption key must be %d characters long"), RequiredKeyLength);
-			return false;
+			return bAnyLoaded;
 		}
 
 		if (EncryptionKeyString.Len() > RequiredKeyLength)
@@ -277,7 +367,7 @@ bool FPPakPatcherKeyChainHelper::LoadKeyChainFromCommandline()
 		if (!FCString::IsPureAnsi(*EncryptionKeyString))
 		{
 			UE_LOG(LogPPakPacher, Error, TEXT("AES encryption key must be a pure ANSI string!"));
-			return false;
+			return bAnyLoaded;
 		}
 
 		auto AnsiKey = StringCast<ANSICHAR>(*EncryptionKeyString);
@@ -290,7 +380,7 @@ bool FPPakPatcherKeyChainHelper::LoadKeyChainFromCommandline()
 		return true;
 	}
 
-	return false;
+	return bAnyLoaded;
 }
 
 void FPPakPatcherKeyChainHelper::LoadKeyChainInGame()
