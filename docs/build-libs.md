@@ -1,4 +1,4 @@
-# build_libs：跨平台库构建
+﻿# build_libs：跨平台库构建
 
 `build_libs/` 是本 fork 新增的 CMake 工程，作用是把上游 `libHDiffPatch/` 的 C/C++ 源码 +
 第三方压缩库源码，编译成 **静态库（archive）** 与 **动态库（shared）**，供 UE 插件 `PPakPatcher` 链接。
@@ -117,9 +117,9 @@ cmake -B ../build/android-arm64 -S . \
 cmake --build ../build/android-arm64 --config Release
 ```
 
-### HarmonyOS arm64 / x86_64
+### OpenHarmony arm64 / x86_64
 
-需先准备 OpenHarmony NDK 或 HarmonyOS NDK 任一：
+需先准备 OpenHarmony NDK 或 OpenHarmony NDK 任一：
 
 | 来源 | 安装方式 |
 | ---- | -------- |
@@ -142,8 +142,8 @@ export OHOS_NDK_HOME=/path/to/ohos-sdk/linux/native
 
 ```bash
 cd build_libs
-cmake -B ../build/harmonyos-arm64 -S . --preset=harmonyos-arm64
-cmake --build ../build/harmonyos-arm64 --config Release
+cmake -B ../build/openharmony-arm64 -S . --preset=openharmony-arm64
+cmake --build ../build/openharmony-arm64 --config Release
 ```
 
 > 完整 13 个平台的预设见 `CMakePresets.json`，与 CI matrix 一一对应。
@@ -155,14 +155,14 @@ cmake --build ../build/harmonyos-arm64 --config Release
 ```powershell
 # Windows
 python local_build_lib\local_build_windows.py
-python local_build_lib\local_build_harmonyos.py    # 自动探测 DevEco Studio SDK
+python local_build_lib\local_build_openharmony.py    # 自动探测 DevEco Studio SDK
 python local_build_lib\local_build_android.py
 ```
 
 ```bash
 # Linux / macOS
 python local_build_lib/local_build_linux.py
-python local_build_lib/local_build_harmonyos.py --ndk-home /path/to/ohos-sdk/.../native
+python local_build_lib/local_build_openharmony.py --ndk-home /path/to/ohos-sdk/.../native
 python local_build_lib/build_all.py                 # 一键跑当前 OS 上能跑的所有平台
 ```
 

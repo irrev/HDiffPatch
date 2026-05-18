@@ -1,4 +1,4 @@
-# AI 执行工作流（AI 上下文）
+﻿# AI 执行工作流（AI 上下文）
 
 本文件给出 AI 在本仓中执行常见任务的推荐"动作剧本"。在不确定如何下手时，优先匹配其中最接近的一条。
 
@@ -26,18 +26,18 @@
 5. 更新 `docs/architecture.md`、`docs/ci-pipeline.md`、`docs/build-libs.md` 的平台表。
 6. 建议在 PR 描述里贴一次成功的 CI run 链接。
 
-### B.1 HarmonyOS（纯血鸿蒙 / OHOS）—— 阶段 1 已落地
+### B.1 OpenHarmony（纯血鸿蒙 / OHOS）—— 阶段 1 已落地
 
 阶段 1（Layer 2 + CI）已完成，参考实现：
 
-- `build_libs/CMakePresets.json`：`harmonyos-arm64`、`harmonyos-x86_64`
-- `build_libs/CMakeLists.txt`：`elseif(OHOS) ... HDIFFPATCH_PLATFORM_HARMONYOS`
-- `build_libs/include/HDiffPatch.h`：`#ifdef HDIFFPATCH_PLATFORM_HARMONYOS` 导出宏分支
-- `.github/workflows/ci-build-ueplugins.yml`：env `OHOS_SDK_VERSION` + "Set up OpenHarmony SDK" 步骤 + Configure (HarmonyOS) 分支 + release `copy_lib`
-- `local_build_lib/local_build_harmonyos.py`：本地脚本，自动探测 DevEco Studio 内置 SDK
-- 产物路径：`ThirdParty/HDiffPatch/{lib,shared}/harmonyos/{arm64,x86_64}/`
+- `build_libs/CMakePresets.json`：`openharmony-arm64`、`openharmony-x86_64`
+- `build_libs/CMakeLists.txt`：`elseif(OHOS) ... HDIFFPATCH_PLATFORM_OPENHARMONY`
+- `build_libs/include/HDiffPatch.h`：`#ifdef HDIFFPATCH_PLATFORM_OPENHARMONY` 导出宏分支
+- `.github/workflows/ci-build-ueplugins.yml`：env `OHOS_SDK_VERSION` + "Set up OpenHarmony SDK" 步骤 + Configure (OpenHarmony) 分支 + release `copy_lib`
+- `local_build_lib/local_build_openharmony.py`：本地脚本，自动探测 DevEco Studio 内置 SDK
+- 产物路径：`ThirdParty/HDiffPatch/{lib,shared}/openharmony/{arm64,x86_64}/`
 
-阶段 2（待办）：UE 官方支持鸿蒙 Target 后，在 `PPakPatcher.Build.cs` 加 HarmonyOS 平台分支。
+阶段 2（待办）：UE 官方支持鸿蒙 Target 后，在 `PPakPatcher.Build.cs` 加 OpenHarmony 平台分支。
 当前 `Build.cs` **不要** 主动加鸿蒙分支，否则 UE 编译会报"未知平台"。
 
 通用注意：
@@ -129,14 +129,14 @@
 2. **范围最小**：只改真正必要的行，不顺手格式化、不重命名、不重排 `#include` 顺序。
 3. **打标记**：每处改动的**开头和结尾**加注释，便于 merge upstream 时识别冲突：
    ```cpp
-   // [fork-patch begin] <simple reason, e.g. HarmonyOS adapter>
+   // [fork-patch begin] <simple reason, e.g. OpenHarmony adapter>
    #if defined(__OHOS__)
        // ...
    #endif
    // [fork-patch end]
    ```
 4. **独立 commit**：不要和 fork 自身的功能改动混在一起。commit message 用 `upstream-patch:` 前缀：
-   - `upstream-patch: add HarmonyOS branch in file_for_patch.c`
+   - `upstream-patch: add OpenHarmony branch in file_for_patch.c`
    - `upstream-patch: fix null deref in HDiff when oldSize==0`
 5. **文档登记**：在 `docs/upstream-patches.md` 记录一行（如果该文件不存在请创建）：
    - 改动范围（文件:行号）

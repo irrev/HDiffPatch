@@ -1,4 +1,4 @@
-# 项目背景（AI 上下文）
+﻿# 项目背景（AI 上下文）
 
 ## 1. 身份
 
@@ -39,7 +39,7 @@
 - 默认不动上游文件；**优先**通过 Layer 2 封装、宏开关、接口扩展等方式规避问题。
 - 只有在以下情况允许修改上游：
   1. 明确的 bug（并优先考虑是否应该上报上游修复）；
-  2. 新平台适配必须在 Layer 1 加宏分支（例如 HarmonyOS / OHOS 的 `_IS_XXX` 开关）；
+  2. 新平台适配必须在 Layer 1 加宏分支（例如 OpenHarmony / OHOS 的 `_IS_XXX` 开关）；
   3. 安全问题；
   4. 第三方库 API 变动导致编译失败。
 - 修改必须：
@@ -57,13 +57,13 @@
 - Linux(arm, x86, x64)
 - macOS（主机架构）
 - iOS（主机架构）
-- **HarmonyOS / 纯血鸿蒙（arm64, x86_64）** ✅ 阶段 1：仅产出 `build_libs` 库，
+- **OpenHarmony / 纯血鸿蒙（arm64, x86_64）** ✅ 阶段 1：仅产出 `build_libs` 库，
   Layer 3 `PPakPatcher.Build.cs` 尚未加鸿蒙分支（等待 UE 官方支持）。
 
 ### 5.2 规划中
 
-- HarmonyOS UE 集成（阶段 2）：等 UE 官方支持鸿蒙 Target 后，补 `PPakPatcher.Build.cs` 平台分支。
-- HarmonyOS armeabi-v7a（如有需求再加）。
+- OpenHarmony UE 集成（阶段 2）：等 UE 官方支持鸿蒙 Target 后，补 `PPakPatcher.Build.cs` 平台分支。
+- OpenHarmony armeabi-v7a（如有需求再加）。
 
 > 当用户询问"是否支持 XXX 平台"时：
 > - 命中 §5.1 列表 → 回答已支持；

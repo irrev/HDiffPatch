@@ -38,7 +38,7 @@ jobs:
       # Set fail-fast to false to ensure that feedback is delivered for all matrix combinations. Consider changing this to true when your workflow is stable.
       fail-fast: false
       matrix:
-        build_target: [windows-x64, windows-x86, android-arm64, android-armeabi, android-x86, android-x86_64, linux-arm, linux-x86, linux-x64, macos, ios, harmonyos-arm64, harmonyos-x86_64]
+        build_target: [windows-x64, windows-x86, android-arm64, android-armeabi, android-x86, android-x86_64, linux-arm, linux-x86, linux-x64, macos, ios, openharmony-arm64, openharmony-x86_64]
         build_type: [Release]
         include:
           - build_target: windows-x64
@@ -74,12 +74,12 @@ jobs:
           - build_target: ios
             os: macos-latest
             preset: ios
-          - build_target: harmonyos-arm64
+          - build_target: openharmony-arm64
             os: ubuntu-latest
-            preset: harmonyos-arm64
-          - build_target: harmonyos-x86_64
+            preset: openharmony-arm64
+          - build_target: openharmony-x86_64
             os: ubuntu-latest
-            preset: harmonyos-x86_64
+            preset: openharmony-x86_64
     steps:
     - uses: actions/checkout@v4
 
@@ -154,15 +154,15 @@ jobs:
       run: |
         echo "NDK_ROOT=${{steps.setup-ndk.outputs.ndk-path}}" >> $GITHUB_ENV
 
-    - name: Set up OpenHarmony SDK (HarmonyOS)
-      if: startsWith(matrix.preset, 'harmonyos')
+    - name: Set up OpenHarmony SDK
+      if: startsWith(matrix.preset, 'openharmony')
       uses: openharmony-rs/setup-ohos-sdk@v0.1
       id: setup-ohos
       with:
         version: ${{ env.OHOS_SDK_VERSION }}
 
     - name: Set OHOS_NDK_HOME
-      if: startsWith(matrix.preset, 'harmonyos')
+      if: startsWith(matrix.preset, 'openharmony')
       shell: bash
       run: |
         if [ -n "${OHOS_SDK_NATIVE:-}" ]; then
@@ -179,8 +179,8 @@ jobs:
         echo "OHOS_NDK_HOME=${OHOS_NDK_HOME:-$NATIVE_DIR}"
         ls "${OHOS_NDK_HOME:-$NATIVE_DIR}/build/cmake/" || echo "WARNING: toolchain not found, check SDK structure"
 
-    - name: Install Ninja (HarmonyOS)
-      if: startsWith(matrix.preset, 'harmonyos')
+    - name: Install Ninja (OpenHarmony)
+      if: startsWith(matrix.preset, 'openharmony')
       shell: bash
       run: |
         sudo apt-get install -y ninja-build
@@ -222,8 +222,8 @@ jobs:
         -DCMAKE_TOOLCHAIN_FILE=${{ steps.setup-ndk.outputs.ndk-path }}/build/cmake/android.toolchain.cmake
         --preset=${{ matrix.preset }}
 
-    - name: Configure CMake (HarmonyOS)
-      if: startsWith(matrix.preset, 'harmonyos')
+    - name: Configure CMake (OpenHarmony)
+      if: startsWith(matrix.preset, 'openharmony')
       run: >
         cmake -B ${{ steps.strings.outputs.build-output-dir }}
         -S ${{ steps.strings.outputs.cmake-dir }}
@@ -320,11 +320,11 @@ jobs:
           copy_lib "archive/ios/static/Release/libHDiffPatch.a" "$BASE_PATH/lib/ios" "libHDiffPatch.a"
           copy_lib "archive/ios/shared/Release/HDiffPatch.framework" "$BASE_PATH/shared/ios" "HDiffPatch.framework"
 
-          # HarmonyOS
-          copy_lib "archive/harmonyos-arm64/static/libHDiffPatch.a"   "$BASE_PATH/lib/harmonyos/arm64"     "libHDiffPatch.a"
-          copy_lib "archive/harmonyos-arm64/shared/libHDiffPatch.so"  "$BASE_PATH/shared/harmonyos/arm64"  "libHDiffPatch.so"
-          copy_lib "archive/harmonyos-x86_64/static/libHDiffPatch.a"  "$BASE_PATH/lib/harmonyos/x86_64"    "libHDiffPatch.a"
-          copy_lib "archive/harmonyos-x86_64/shared/libHDiffPatch.so" "$BASE_PATH/shared/harmonyos/x86_64" "libHDiffPatch.so"
+          # OpenHarmony
+          copy_lib "archive/openharmony-arm64/static/libHDiffPatch.a"   "$BASE_PATH/lib/openharmony/arm64"     "libHDiffPatch.a"
+          copy_lib "archive/openharmony-arm64/shared/libHDiffPatch.so"  "$BASE_PATH/shared/openharmony/arm64"  "libHDiffPatch.so"
+          copy_lib "archive/openharmony-x86_64/static/libHDiffPatch.a"  "$BASE_PATH/lib/openharmony/x86_64"    "libHDiffPatch.a"
+          copy_lib "archive/openharmony-x86_64/shared/libHDiffPatch.so" "$BASE_PATH/shared/openharmony/x86_64" "libHDiffPatch.so"
 
       - name: Copy Head
         shell: bash

@@ -1,4 +1,4 @@
-# 上游改动登记表（Upstream Patches）
+﻿# 上游改动登记表（Upstream Patches）
 
 本仓 fork 自 [sisong/HDiffPatch](https://github.com/sisong/HDiffPatch)，原则上 **Layer 1 上游代码保持不变**。
 但在遇到 bug、平台适配、安全问题、第三方 API 变动等必要性场景时，允许进行**最小化修改**。
@@ -40,7 +40,7 @@
 <!--
 示例行（真正登记时取消注释并填写）：
 
-| 2026-05-15 | libHDiffPatch/HPatch/patch.c:L123-L130 | HarmonyOS 缺少 POSIX 某 API，加 `__OHOS__` 分支 | abc1234 | 未反馈 | 否 |
+| 2026-05-15 | libHDiffPatch/HPatch/patch.c:L123-L130 | OpenHarmony 缺少 POSIX 某 API，加 `__OHOS__` 分支 | abc1234 | 未反馈 | 否 |
 | 2026-05-20 | file_for_patch.c:fopen_wrapper | Windows 上长路径处理 bug | def5678 | [上游 PR #999](https://github.com/sisong/HDiffPatch/pull/999) | 上游合并后可回退 |
 -->
 

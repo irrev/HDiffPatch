@@ -1,9 +1,9 @@
 """一键构建：在当前宿主机上跑所有可跑的平台。
 
 策略：
-- Windows: windows + android + harmonyos
-- Linux:   linux   + android + harmonyos
-- macOS:   macos + ios + android + harmonyos
+- Windows: windows + android + openharmony
+- Linux:   linux   + android + openharmony
+- macOS:   macos + ios + android + openharmony
 
 任一平台失败不中断，全部跑完后汇总成功 / 失败列表（与 CI 的 fail-fast: false 一致）。
 
@@ -38,15 +38,15 @@ def main() -> None:
     host = host_os()
     plan: list[str]
     if host == "windows":
-        plan = ["local_build_windows", "local_build_android", "local_build_harmonyos"]
+        plan = ["local_build_windows", "local_build_android", "local_build_openharmony"]
     elif host == "linux":
-        plan = ["local_build_linux", "local_build_android", "local_build_harmonyos"]
+        plan = ["local_build_linux", "local_build_android", "local_build_openharmony"]
     elif host == "macos":
         plan = [
             "local_build_macos",
             "local_build_ios",
             "local_build_android",
-            "local_build_harmonyos",
+            "local_build_openharmony",
         ]
     else:
         print(f"Unsupported host: {host}", file=sys.stderr)

@@ -181,10 +181,10 @@
             }
         },
         {
-            "name": "harmonyos-arm64",
-            "displayName": "HarmonyOS arm64",
-            "description": "Build for HarmonyOS / OpenHarmony arm64-v8a (use OHOS_NDK_HOME env to point to native/ dir)",
-            "binaryDir": "${sourceDir}/out/harmonyos-arm64",
+            "name": "openharmony-arm64",
+            "displayName": "OpenHarmony arm64",
+            "description": "Build for OpenHarmony arm64-v8a (use OHOS_NDK_HOME env to point to native/ dir)",
+            "binaryDir": "${sourceDir}/out/openharmony-arm64",
             "generator": "Ninja",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Release",
@@ -196,10 +196,10 @@
             }
         },
         {
-            "name": "harmonyos-x86_64",
-            "displayName": "HarmonyOS x86_64",
-            "description": "Build for HarmonyOS / OpenHarmony x86_64 (emulator)",
-            "binaryDir": "${sourceDir}/out/harmonyos-x86_64",
+            "name": "openharmony-x86_64",
+            "displayName": "OpenHarmony x86_64",
+            "description": "Build for OpenHarmony x86_64 (emulator)",
+            "binaryDir": "${sourceDir}/out/openharmony-x86_64",
             "generator": "Ninja",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Release",

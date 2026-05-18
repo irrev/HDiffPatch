@@ -175,16 +175,16 @@ public class PPakPatcher : ModuleRules
 			}
 			else if (IsTargetPlatform(Target.Platform, "OpenHarmony"))
 			{
-				PublicDefinitions.Add("HDIFFPATCH_PLATFORM_HARMONYOS=1");
+				PublicDefinitions.Add("HDIFFPATCH_PLATFORM_OPENHARMONY=1");
 				if (bUseStaticLib)
 				{
-					PublicAdditionalLibraries.Add(Path.Combine(StaticPath, "harmonyos", "arm64", "libHDiffPatch.a"));
-					PublicAdditionalLibraries.Add(Path.Combine(StaticPath, "harmonyos", "x86_64", "libHDiffPatch.a"));
+					PublicAdditionalLibraries.Add(Path.Combine(StaticPath, "openharmony", "arm64", "libHDiffPatch.a"));
+					PublicAdditionalLibraries.Add(Path.Combine(StaticPath, "openharmony", "x86_64", "libHDiffPatch.a"));
 				}
 				else
 				{
-					PublicAdditionalLibraries.Add(Path.Combine(SharedPath, "harmonyos", "arm64", "libHDiffPatch.so"));
-					PublicAdditionalLibraries.Add(Path.Combine(SharedPath, "harmonyos", "x86_64", "libHDiffPatch.so"));
+					PublicAdditionalLibraries.Add(Path.Combine(SharedPath, "openharmony", "arm64", "libHDiffPatch.so"));
+					PublicAdditionalLibraries.Add(Path.Combine(SharedPath, "openharmony", "x86_64", "libHDiffPatch.so"));
 				}
 			}
 		}

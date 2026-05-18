@@ -1,4 +1,4 @@
-<!--
+﻿<!--
 感谢贡献 PPakPatcher！请按本模板填写 PR，方便 reviewer 快速理解改动。
 与本仓无关的段落可以删除，但请勿整体移除模板。
 -->
@@ -55,13 +55,13 @@
 - [ ] 已触发一次 CI 手动 dispatch，**对应平台全部成功**（贴链接 👇）
   - CI run：
 
-#### B.1 若为 HarmonyOS（纯血鸿蒙 / OHOS）
+#### B.1 若为 OpenHarmony（纯血鸿蒙 / OHOS）
 
 - [ ] CI 中已加入 OHOS NDK 的安装步骤（参考现有 Android NDK 处理方式）
 - [ ] `CMakePresets.json` 使用了 OHOS NDK 的 toolchain 文件（`ohos.toolchain.cmake` 或同等）
-- [ ] `build_libs/CMakeLists.txt` 新增 `elseif(OHOS) ...` 分支，定义 `HDIFFPATCH_PLATFORM_HARMONYOS`
-- [ ] `build_libs/include/HDiffPatch.h` 新增 `#ifdef HDIFFPATCH_PLATFORM_HARMONYOS` 的导出宏分支
-- [ ] 产物目录使用 `lib/harmonyos/<arch>/` 与 `shared/harmonyos/<arch>/` 约定
+- [ ] `build_libs/CMakeLists.txt` 新增 `elseif(OHOS) ...` 分支，定义 `HDIFFPATCH_PLATFORM_OPENHARMONY`
+- [ ] `build_libs/include/HDiffPatch.h` 新增 `#ifdef HDIFFPATCH_PLATFORM_OPENHARMONY` 的导出宏分支
+- [ ] 产物目录使用 `lib/openharmony/<arch>/` 与 `shared/openharmony/<arch>/` 约定
 - [ ] 如上游代码需加鸿蒙分支，已按 §4.G fork-patch 纪律处理
 
 ### C. 调整压缩算法 / CMake 选项
@@ -104,7 +104,7 @@
 - [ ] 已考虑并说明是否向上游反馈（PR/issue 链接，或"暂不反馈"的原因）
 
 **非改不可的原因**：
-<!-- 例如：HarmonyOS 适配必须在 file_for_patch.c 加 __OHOS__ 分支；上游未修复的 bug 链接等 -->
+<!-- 例如：OpenHarmony 适配必须在 file_for_patch.c 加 __OHOS__ 分支；上游未修复的 bug 链接等 -->
 
 
 ---

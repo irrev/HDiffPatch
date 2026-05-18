@@ -1,4 +1,4 @@
-# 本地构建脚本（local_build_lib）
+﻿# 本地构建脚本（local_build_lib）
 
 提供 Python 脚本，在本地一键编译 `build_libs/` 工程，按平台产出 HDiffPatch 静态/动态库，
 便于开发自检。**生产发版仍以 GitHub CI（`ci-build-ueplugins.yml`）为准**。
@@ -13,7 +13,7 @@ local_build_lib/
 ├── local_build_linux.py        # arm + x86 + x64
 ├── local_build_macos.py        # universal (arm64 + x86_64)
 ├── local_build_ios.py          # arm64
-├── local_build_harmonyos.py    # arm64 + x86_64
+├── local_build_openharmony.py    # arm64 + x86_64
 ├── build_all.py                # 一键跑当前 OS 上能跑的所有平台
 ├── README.md                   # 本文件
 ├── build/                      # CMake 临时构建目录（git 忽略）
@@ -76,7 +76,7 @@ python local_build_lib/local_build_macos.py
 python local_build_lib/local_build_ios.py
 ```
 
-### 3.5 HarmonyOS（arm64 + x86_64）
+### 3.5 OpenHarmony（arm64 + x86_64）
 
 **前置**：以下任一 SDK 即可，脚本按优先级自动探测。
 
@@ -84,7 +84,7 @@ python local_build_lib/local_build_ios.py
 | ---- | -------- | ---- |
 | **DevEco Studio**（推荐 Win/macOS） | `C:\Program Files\Huawei\DevEco Studio\sdk\default\openharmony\native` | 安装 DevEco Studio 即自带 |
 | **OpenHarmony NDK**（推荐 Linux / 离线包）| 解压后 `<...>/native/` | https://github.com/openharmony-rs/ohos-sdk/releases |
-| **HarmonyOS NDK**（华为商业版） | DevEco Studio 内 `sdk/default/hms/native` | 脚本会自动 fallback |
+| **OpenHarmony NDK**（华为商业版） | DevEco Studio 内 `sdk/default/hms/native` | 脚本会自动 fallback |
 
 **探测顺序**：
 1. `--ndk-home <path>` 命令行参数
@@ -93,9 +93,9 @@ python local_build_lib/local_build_ios.py
 4. 各 OS 的默认 DevEco Studio 安装路径
 
 ```powershell
-python local_build_lib\local_build_harmonyos.py
-python local_build_lib\local_build_harmonyos.py --archs arm64
-python local_build_lib\local_build_harmonyos.py --ndk-home D:\ohos-sdk\linux\native
+python local_build_lib\local_build_openharmony.py
+python local_build_lib\local_build_openharmony.py --archs arm64
+python local_build_lib\local_build_openharmony.py --ndk-home D:\ohos-sdk\linux\native
 ```
 
 ## 4. 一键构建
@@ -104,7 +104,7 @@ python local_build_lib\local_build_harmonyos.py --ndk-home D:\ohos-sdk\linux\nat
 python local_build_lib/build_all.py
 ```
 
-按宿主机能力自动决定平台集合（Windows: windows+android+harmonyos；
+按宿主机能力自动决定平台集合（Windows: windows+android+OpenHarmony；
 macOS 还会带上 macos+ios），任一失败不中断，最终汇总。
 
 ## 5. 产物结构
@@ -119,7 +119,7 @@ local_build_lib/out/
 ├── android/
 │   ├── lib/{arm64,armeabi,x86,x86_64}/libHDiffPatch.a
 │   └── shared/{arm64,armeabi,x86,x86_64}/libHDiffPatch.so
-├── harmonyos/
+├── OpenHarmony/
 │   ├── lib/{arm64,x86_64}/libHDiffPatch.a
 │   └── shared/{arm64,x86_64}/libHDiffPatch.so
 └── ...
@@ -137,7 +137,7 @@ local_build_lib/out/
 | -------- | ------ | ---------------- |
 | `local_build_windows.py --archs x64` | `windows-x64` | `windows-x64` |
 | `local_build_android.py --archs arm64` | `android-arm64` | `android-arm64` |
-| `local_build_harmonyos.py --archs arm64` | `harmonyos-arm64` | `harmonyos-arm64` |
+| `local_build_openharmony.py --archs arm64` | `openharmony-arm64` | `openharmony-arm64` |
 | ... | ... | ... |
 
 因此**本地通过 ⇒ CI 大概率也通过**（差异主要是 NDK 版本、宿主工具链）。
@@ -149,5 +149,5 @@ local_build_lib/out/
 | `cmake: command not found` | 安装 CMake 并加入 PATH |
 | `cl.exe not found`（Windows） | 在 *Developer Command Prompt for VS* 中重新运行 |
 | Android：`Could not find NDK` | 设置 `NDK_ROOT` 环境变量 |
-| HarmonyOS：未找到 toolchain | 启动 DevEco Studio 一次让其下载 SDK；或用 `--ndk-home` 显式指定 |
+| OpenHarmony：未找到 toolchain | 启动 DevEco Studio 一次让其下载 SDK；或用 `--ndk-home` 显式指定 |
 | 第三方库目录已存在但是错的 | 删除 `<parent>/<libname>/` 让脚本重克隆 |

@@ -1,4 +1,4 @@
-"""
+﻿"""
 本地构建脚本公共模块。
 
 职责：
@@ -175,7 +175,7 @@ class BuildTask:
 
 @dataclass
 class LocalBuilder:
-    platform_name: str                # 输出目录的平台名（"windows"、"harmonyos" 等）
+    platform_name: str                # 输出目录的平台名（"windows"、"OpenHarmony" 等）
     tasks: list[BuildTask]
     needs_bzip2: bool = False         # Windows CMakeLists 默认会用到
     require_host_os: str | None = None  # "windows"/"linux"/"macos" 之一时强制限制宿主机

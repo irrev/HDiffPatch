@@ -1,10 +1,10 @@
-"""本地构建：HarmonyOS（arm64 + x86_64）。
+"""本地构建：OpenHarmony（arm64 + x86_64）。
 
 宿主机：Linux / macOS / Windows 均可。
 依赖：以下任一种 SDK 任选其一，脚本会自动探测：
     1) DevEco Studio（含内置 SDK）
        - Windows 默认: C:\\Program Files\\Huawei\\DevEco Studio\\sdk\\default\\openharmony\\native
-       - 也可使用其内置的 hms\\native（HarmonyOS 商业版 NDK），脚本会优先选 openharmony
+       - 也可使用其内置的 hms\\native，脚本会优先选 openharmony
     2) 独立下载的 OpenHarmony NDK
        - GitHub 镜像：https://github.com/openharmony-rs/ohos-sdk/releases
        - 解压后传入 --ndk-home <.../native>
@@ -16,7 +16,7 @@
     Windows 默认安装路径
 
 用法：
-    python local_build_lib/local_build_harmonyos.py [--archs arm64,x86_64] [--ndk-home <path>]
+    python local_build_lib/local_build_openharmony.py [--archs arm64,x86_64] [--ndk-home <path>]
 """
 from __future__ import annotations
 
@@ -28,8 +28,8 @@ from pathlib import Path
 from _common import BuildTask, LocalBuilder, info, warn, die
 
 ARCH_TO_PRESET = {
-    "arm64":  "harmonyos-arm64",
-    "x86_64": "harmonyos-x86_64",
+    "arm64":  "openharmony-arm64",
+    "x86_64": "openharmony-x86_64",
 }
 
 
@@ -64,7 +64,6 @@ def _candidate_native_dirs() -> list[Path]:
             Path("/Applications/DevEco-Studio.app/Contents/sdk/default/hms/native"),
         ])
     else:
-        # Linux 上 DevEco Studio 不官方支持，仅留 OHOS_NDK_HOME 兜底
         pass
 
     return cands
@@ -85,7 +84,7 @@ def resolve_ohos_ndk_home(cli_arg: str | None) -> Path:
         if ok:
             return c
 
-    # 兜底：如果只有 hmos.toolchain.cmake（华为商业 SDK 新版可能改名），也允许
+    # 兜底：如果只有 hmos.toolchain.cmake
     for c in cands:
         if c.is_dir():
             hmos = c / "build" / "cmake" / "hmos.toolchain.cmake"
@@ -94,7 +93,7 @@ def resolve_ohos_ndk_home(cli_arg: str | None) -> Path:
                 return c
 
     die(
-        "OpenHarmony / HarmonyOS NDK not found.\n"
+        "OpenHarmony NDK not found.\n"
         "Please either:\n"
         "  - Install DevEco Studio (it bundles SDK at sdk/default/openharmony/native), or\n"
         "  - Download OpenHarmony NDK from https://github.com/openharmony-rs/ohos-sdk/releases\n"
@@ -116,7 +115,7 @@ def pick_toolchain_file(ndk_home: Path) -> Path:
 
 
 def main() -> None:
-    p = argparse.ArgumentParser(description="Build HDiffPatch lib for HarmonyOS / OpenHarmony.")
+    p = argparse.ArgumentParser(description="Build HDiffPatch lib for OpenHarmony.")
     p.add_argument(
         "--archs",
         default="arm64,x86_64",
@@ -139,8 +138,6 @@ def main() -> None:
     info(f"OHOS_NDK_HOME = {ndk_home}")
     info(f"toolchain     = {toolchain}")
 
-    # 把 OHOS_NDK_HOME 注入子进程环境，供 CMakePresets 中的 $env{OHOS_NDK_HOME} 解析。
-    # 同时显式 -DCMAKE_TOOLCHAIN_FILE 兜底，以应对 hmos.toolchain.cmake 命名。
     env_overrides = {"OHOS_NDK_HOME": str(ndk_home)}
     extra_args = [f"-DCMAKE_TOOLCHAIN_FILE={toolchain}"]
 
@@ -155,7 +152,7 @@ def main() -> None:
     ]
 
     LocalBuilder(
-        platform_name="harmonyos",
+        platform_name="openharmony",
         tasks=tasks,
     ).run_all()
 

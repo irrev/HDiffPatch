@@ -249,10 +249,10 @@ elseif(IOS)
         XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED "NO"
     )
 elseif(OHOS OR CMAKE_SYSTEM_NAME STREQUAL "OHOS")
-    # HarmonyOS / OpenHarmony (纯血鸿蒙)
+    # OpenHarmony (纯血鸿蒙)
     # OHOS NDK toolchain 会自动设置 CMAKE_SYSTEM_NAME=OHOS 与 OHOS=ON
-    target_compile_definitions(HDiffPatchStatic PRIVATE HDIFFPATCH_PLATFORM_HARMONYOS)
-    target_compile_definitions(HDiffPatchShared PRIVATE HDIFFPATCH_PLATFORM_HARMONYOS)
+    target_compile_definitions(HDiffPatchStatic PRIVATE HDIFFPATCH_PLATFORM_OPENHARMONY)
+    target_compile_definitions(HDiffPatchShared PRIVATE HDIFFPATCH_PLATFORM_OPENHARMONY)
     # OHOS 底层是 musl + Linux-like，无需链接 Android 的 log 库
     # 如未来需要日志，可改为：target_link_libraries(... hilog_ndk.z)
 elseif(UNIX AND NOT APPLE)

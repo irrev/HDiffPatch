@@ -51,7 +51,7 @@
 		#define HDIFFPATCH_IMPORT __attribute__((visibility("default")))
 		#endif
 
-		#ifdef HDIFFPATCH_PLATFORM_HARMONYOS
+		#ifdef HDIFFPATCH_PLATFORM_OPENHARMONY
 		#define HDIFFPATCH_EXPORT __attribute__((visibility("default")))
 		#define HDIFFPATCH_IMPORT __attribute__((visibility("default")))
 		#endif

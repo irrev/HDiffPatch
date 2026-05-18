@@ -1,4 +1,4 @@
-# 仓库结构与三层架构
+﻿# 仓库结构与三层架构
 
 ## 1. 仓库结构（按职责分组）
 
@@ -111,17 +111,17 @@ UEPlugins/PPakPatcher/Source/PPakPatcher/ThirdParty/HDiffPatch/
 │   ├── linux/{arm,x86,x64}/libHDiffPatch.a
 │   ├── macos/libHDiffPatch.a
 │   ├── ios/libHDiffPatch.a
-│   └── harmonyos/{arm64,x86_64}/libHDiffPatch.a
+│   └── openharmony/{arm64,x86_64}/libHDiffPatch.a
 └── shared/
     ├── windows/{x64,x86}/HDiffPatch.dll
     ├── android/{arm64,armeabi,x86,x86_64}/libHDiffPatch.so
     ├── linux/{arm,x86,x64}/libHDiffPatch.so
     ├── macos/libHDiffPatch.dylib
     ├── ios/HDiffPatch.framework
-    └── harmonyos/{arm64,x86_64}/libHDiffPatch.so
+    └── openharmony/{arm64,x86_64}/libHDiffPatch.so
 ```
 
-> Layer 3（UE 插件）目前在 `PPakPatcher.Build.cs` 中尚未加入 HarmonyOS 分支，
+> Layer 3（UE 插件）目前在 `PPakPatcher.Build.cs` 中尚未加入 OpenHarmony 分支，
 > 等待 UE 官方支持鸿蒙 Target 后再补；阶段 1 仅产出库供后续接入。
 
 `PPakPatcher.Build.cs` 据此按平台选择正确的库链接。
