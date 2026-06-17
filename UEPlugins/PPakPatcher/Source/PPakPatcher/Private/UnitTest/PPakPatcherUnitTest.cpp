@@ -130,7 +130,7 @@ bool FPPakPatcherUnitTest::DirecotryDiffPatchTest(const FString& InNewDir, const
 				FPResPatchDataPtr PatchData;
 				double StartTime = FPlatformTime::Seconds();
 				const bool bCreateOk = ResPatcher.CreateDiff(PatchFile, NewFile, OldFile, PatchData,
-					EPPakPatchMode::PakAware, CompressType);
+					EPPakPatchMode::PakAwareDecryptAndCompress, CompressType);
 				Stats.Duration_CreateDiff = (FPlatformTime::Seconds() - StartTime);
 				UE_LOG(LogPPakPacher, Display, TEXT("  CreateDiff Cost: %.4f s"), Stats.Duration_CreateDiff);
 				if (!bCreateOk)

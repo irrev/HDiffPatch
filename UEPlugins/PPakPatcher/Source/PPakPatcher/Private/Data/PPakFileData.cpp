@@ -89,6 +89,12 @@ bool FPPakFileData::PreCheckDecript()
 {
 	UE_LOG(LogPPakPacher, Log, TEXT("FPPakFileData::PreCheckDecript - Pre-check decrpit pak file: %s and check file hash."), *PakFilename);
 
+	// 锁粒度拆分：仅 FCoreDelegates Broadcast 需要互斥（TMulticastDelegateBase 非线程安全），
+	// 读 header / 试错解密用独立 Reader 不需要锁。
+	// GBroadcastedKeys 去重：同一 Guid 进程内只 Broadcast 一次。
+	static FCriticalSection GBroadcastCS;
+	static TSet<FGuid> GBroadcastedKeys;
+
 	FArchive* Reader = IFileManager::Get().CreateFileReader(*PakFilename);
 	if (!Reader)
 	{
@@ -161,9 +167,21 @@ bool FPPakFileData::PreCheckDecript()
 				NamedAESKey = FoundKey;
 				UE_LOG(LogPPakPacher, Log, TEXT("Found valid decript key [%s]!"), *NamedAESKey->Name);
 #if ENGINE_MAJOR_VERSION > 4 || ENGINE_MINOR_VERSION >= 26
-				FCoreDelegates::GetRegisterEncryptionKeyMulticastDelegate().Broadcast(NamedAESKey->Guid, NamedAESKey->Key);
+				// 仅 Broadcast 阶段加锁；同一 Guid 已 Broadcast 过则跳过（重复 Broadcast 无副作用，但浪费）。
+				{
+					FScopeLock Lock(&GBroadcastCS);
+					bool bAlreadyBroadcasted = GBroadcastedKeys.Contains(NamedAESKey->Guid);
+					if (!bAlreadyBroadcasted)
+					{
+						FCoreDelegates::GetRegisterEncryptionKeyMulticastDelegate().Broadcast(NamedAESKey->Guid, NamedAESKey->Key);
+						GBroadcastedKeys.Add(NamedAESKey->Guid);
+					}
+				}
 #else
-				FCoreDelegates::GetRegisterEncryptionKeyDelegate().ExecuteIfBound(NamedAESKey->Guid, NamedAESKey->Key);
+				{
+					FScopeLock Lock(&GBroadcastCS);
+					FCoreDelegates::GetRegisterEncryptionKeyDelegate().ExecuteIfBound(NamedAESKey->Guid, NamedAESKey->Key);
+				}
 #endif
 			}
 			else

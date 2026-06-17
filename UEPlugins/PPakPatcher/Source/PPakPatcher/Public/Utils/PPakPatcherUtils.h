@@ -26,6 +26,20 @@ public:
 	static uint32  CalculateFileCrc32(const FString& InFilename);
 
 	/**
+	 * 单 pass 同时计算 MD5 + CRC32 + FileSize（性能优化，避免 3 次全文件 IO）。
+	 * 修复 #10：CreatePatch 主循环中每个 chunk 的 .pak/.utoc/.ucas 都需要 MD5/CRC32/Size
+	 * 三个值，旧实现各调一个独立 helper → 同一文件被读取 3 次。改用本接口后只读 1 次。
+	 *
+	 * @param InFilename 文件路径
+	 * @param OutMD5     输出：MD5 字符串（hex 形式，与 CalculateFileMD5String 兼容）；失败时为空
+	 * @param OutCRC32   输出：CRC32（与 CalculateFileCrc32 一致）；失败时为 0
+	 * @param OutSize    输出：文件字节数；失败时为 0
+	 * @return true 表示文件已存在且全部读取成功
+	 */
+	static bool CalculateFileHashesAndSize(const FString& InFilename,
+		FString& OutMD5, uint32& OutCRC32, int64& OutSize);
+
+	/**
 	 * 按 UPPakPatcherSettings::CheckFileHashType 校验文件 hash。
 	 *   - None  : 直接 true（不校验）
 	 *   - Crc32 : 仅当 ExpectedCrc32 非 0 时校验 CRC32

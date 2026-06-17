@@ -67,7 +67,7 @@ public:
 	const TMap<FString, FPUpdateManifestSummaryItem>& GetManifestFileItems() const { return ManifestFileItems; }
 	const FPUpdateManifestSummaryItem* FindFile(const FString& InFileName) const { return ManifestFileItems.Find(InFileName); }
 
-	/** 清空所有数据（不含 SourceFilename）。 */
+	/** 清空所有数据（含 SourceFilename，确保 LoadFromString 单独调用时不残留前一次 Load 的来源信息）。 */
 	void Reset();
 
 public:

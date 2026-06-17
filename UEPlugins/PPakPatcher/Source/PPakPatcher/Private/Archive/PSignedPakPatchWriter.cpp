@@ -21,9 +21,17 @@ FPSignedPakPatchWriter::FPSignedPakPatchWriter(FArchive& InPak, const FString& I
 
 FPSignedPakPatchWriter::~FPSignedPakPatchWriter()
 {
+	// 兜底：刷剩余 buffer + 写 sig 文件。如果用户已正确调 Close()，bFinalized=true 这里 no-op。
 	if (BufferArchive.Tell() > 0)
 	{
 		SerializeBufferAndSign();
+	}
+	if (!bFinalized)
+	{
+		UE_LOG(LogPPakPacher, Warning,
+			TEXT("FPSignedPakPatchWriter::~ - Close() was not called explicitly; writing signature file in destructor. File:%s"),
+			*PakSignaturesFilename);
+		FinalizeSignatureFile();
 	}
 	delete& PakWriter;
 }
@@ -39,6 +47,28 @@ void FPSignedPakPatchWriter::SerializeBufferAndSign()
 	Buffer.Empty(FPakInfo::MaxChunkDataSize);
 }
 
+void FPSignedPakPatchWriter::FinalizeSignatureFile()
+{
+	if (bFinalized)
+	{
+		return;
+	}
+	bFinalized = true;
+
+	TUniquePtr<FArchive> SignatureWriter(IFileManager::Get().CreateFileWriter(*PakSignaturesFilename));
+	if (!SignatureWriter)
+	{
+		UE_LOG(LogPPakPacher, Error,
+			TEXT("FPSignedPakPatchWriter::FinalizeSignatureFile - failed to create signature file writer: %s"),
+			*PakSignaturesFilename);
+		return;
+	}
+	FPakSignatureFile SignatureFile;
+	SignatureFile.SetChunkHashesAndSign(ChunkHashes, SignatureData, SigningKey);
+	SignatureFile.Serialize(*SignatureWriter);
+	// TUniquePtr 析构自动 Close 并 delete
+}
+
 bool FPSignedPakPatchWriter::Close()
 {
 	if (BufferArchive.Tell() > 0)
@@ -46,11 +76,8 @@ bool FPSignedPakPatchWriter::Close()
 		SerializeBufferAndSign();
 	}
 
-	FArchive* SignatureWriter = IFileManager::Get().CreateFileWriter(*PakSignaturesFilename);
-	FPakSignatureFile SignatureFile;
-	SignatureFile.SetChunkHashesAndSign(ChunkHashes, SignatureData, SigningKey);
-	SignatureFile.Serialize(*SignatureWriter);
-	delete SignatureWriter;
+	// 写 sig 文件（重复 Close 是 no-op）
+	FinalizeSignatureFile();
 
 	return FArchive::Close();
 }

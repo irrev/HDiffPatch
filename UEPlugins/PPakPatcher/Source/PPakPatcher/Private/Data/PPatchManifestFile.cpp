@@ -1,9 +1,13 @@
 // Copyright (c) Tencent. All rights reserved.
 #include "Data/PPatchManifestFile.h"
 #include "Data/PPakPatcherDataType.h"     // LogPPakPacher
+#include "Data/PResPatchData.h"           // PRES_PATCH_FORMAT_VERSION
+#include "PPakPatcherSettings.h"
 
 #include "HAL/FileManager.h"
+#include "HAL/PlatformProcess.h"
 #include "Misc/FileHelper.h"
+#include "Misc/DateTime.h"
 
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
@@ -94,10 +98,209 @@ namespace
 		Entry.NewSize  = ParseInt64Field(InObj,  TEXT("NewSize"));
 		return Entry;
 	}
+
+	// ---- BuildSettings 辅助：enum 与字符串互转 ----
+
+	const TCHAR* PakPatchModeToString(EPPakPatchMode InValue)
+	{
+		switch (InValue)
+		{
+		case EPPakPatchMode::Binary:                       return TEXT("Binary");
+		case EPPakPatchMode::PakAwareNoDecrypt:            return TEXT("PakAwareNoDecrypt");
+		case EPPakPatchMode::PakAwareDecryptAndCompress:   return TEXT("PakAwareDecryptAndCompress");
+		case EPPakPatchMode::PakAwareDecryptAndDecompress: return TEXT("PakAwareDecryptAndDecompress");
+		default:                                           return TEXT("Unknown");
+		}
+	}
+
+	const TCHAR* ExternalCompressTypeToString(EPPatchExternalCompressType InValue)
+	{
+		switch (InValue)
+		{
+		case EPPatchExternalCompressType::None:            return TEXT("None");
+		case EPPatchExternalCompressType::Oodle_Selkie:    return TEXT("Oodle_Selkie");
+		case EPPatchExternalCompressType::Oodle_Mermaid:   return TEXT("Oodle_Mermaid");
+		case EPPatchExternalCompressType::Oodle_Kraken:    return TEXT("Oodle_Kraken");
+		case EPPatchExternalCompressType::Oodle_Leviathan: return TEXT("Oodle_Leviathan");
+		default:                                           return TEXT("Unknown");
+		}
+	}
+
+	const TCHAR* CheckFileHashTypeToString(EPPakCheckFileHashType InValue)
+	{
+		switch (InValue)
+		{
+		case EPPakCheckFileHashType::None:  return TEXT("None");
+		case EPPakCheckFileHashType::Crc32: return TEXT("Crc32");
+		case EPPakCheckFileHashType::MD5:   return TEXT("MD5");
+		default:                            return TEXT("Unknown");
+		}
+	}
+
+	bool ParseBoolField(const TSharedPtr<FJsonObject>& InObj, const FString& InField, bool InDefault)
+	{
+		bool Value = InDefault;
+		if (InObj.IsValid()) { InObj->TryGetBoolField(InField, Value); }
+		return Value;
+	}
+
+	int32 ParseInt32Field(const TSharedPtr<FJsonObject>& InObj, const FString& InField, int32 InDefault)
+	{
+		double D = 0.0;
+		if (InObj.IsValid() && InObj->TryGetNumberField(InField, D))
+		{
+			return static_cast<int32>(D);
+		}
+		return InDefault;
+	}
+
+	// ---- BuildSettings 序列化 ----
+
+	TSharedRef<FJsonObject> BuildSettingsToJson(const FPPatchBuildSettings& In)
+	{
+		TSharedRef<FJsonObject> Obj = MakeShared<FJsonObject>();
+
+		// 元信息
+		Obj->SetStringField(TEXT("CreatedAtUtc"),       In.CreatedAtUtc);
+		Obj->SetNumberField(TEXT("PatchFormatVersion"), static_cast<double>(In.PatchFormatVersion));
+		Obj->SetStringField(TEXT("PluginVersion"),      In.PluginVersion);
+		Obj->SetStringField(TEXT("HostMachine"),        In.HostMachine);
+
+		// Mode / 预处理
+		Obj->SetStringField(TEXT("PakPatchMode"),       In.PakPatchMode);
+
+		// 外部压缩
+		Obj->SetStringField(TEXT("ExternalCompressType"),  In.ExternalCompressType);
+		Obj->SetNumberField(TEXT("ExternalCompressLevel"), static_cast<double>(In.ExternalCompressLevel));
+
+		// HDiff
+		Obj->SetBoolField  (TEXT("bUseSingleCompressMode"), In.bUseSingleCompressMode);
+		Obj->SetNumberField(TEXT("MinSingleMatchScore"),    static_cast<double>(In.MinSingleMatchScore));
+		Obj->SetBoolField  (TEXT("bUseBigCacheMatch"),      In.bUseBigCacheMatch);
+		Obj->SetNumberField(TEXT("ThreadNum"),              static_cast<double>(In.ThreadNum));
+		Obj->SetNumberField(TEXT("PatchStepMemSize"),       static_cast<double>(In.PatchStepMemSize));
+
+		// 校验 / 行为开关
+		Obj->SetStringField(TEXT("CheckFileHashType"),  In.CheckFileHashType);
+		Obj->SetBoolField  (TEXT("bUsePerBlockDiff"),   In.bUsePerBlockDiff);
+		Obj->SetBoolField  (TEXT("bDoubleCheckEntry"),  In.bDoubleCheckEntry);
+		Obj->SetBoolField  (TEXT("bRecordSignToPatch"), In.bRecordSignToPatch);
+		Obj->SetBoolField  (TEXT("bUseSignWriter"),     In.bUseSignWriter);
+		Obj->SetBoolField  (TEXT("bGenPakFileMD5"),     In.bGenPakFileMD5);
+
+		// pak 元数据各 block patch 开关
+		Obj->SetBoolField(TEXT("bBinaryPatchIndexBlock"),         In.bBinaryPatchIndexBlock);
+		Obj->SetBoolField(TEXT("bBinaryPatchPathHashBlock"),      In.bBinaryPatchPathHashBlock);
+		Obj->SetBoolField(TEXT("bBinaryPatchFullDirectoryBlock"), In.bBinaryPatchFullDirectoryBlock);
+		Obj->SetBoolField(TEXT("bBinaryPatchHeadBlock"),          In.bBinaryPatchHeadBlock);
+
+		// precache
+		Obj->SetBoolField(TEXT("bPrecachePatchDataOnSave"), In.bPrecachePatchDataOnSave);
+		Obj->SetBoolField(TEXT("bPrecachePatchDataOnLoad"), In.bPrecachePatchDataOnLoad);
+
+		// 任务级并发
+		Obj->SetNumberField(TEXT("PatchTaskThreadNum"), static_cast<double>(In.PatchTaskThreadNum));
+
+		return Obj;
+	}
+
+	FPPatchBuildSettings JsonToBuildSettings(const TSharedPtr<FJsonObject>& InObj)
+	{
+		FPPatchBuildSettings S;
+		if (!InObj.IsValid()) return S;
+
+		S.CreatedAtUtc       = ParseStringField(InObj, TEXT("CreatedAtUtc"));
+		S.PatchFormatVersion = ParseInt32Field (InObj, TEXT("PatchFormatVersion"), 0);
+		S.PluginVersion      = ParseStringField(InObj, TEXT("PluginVersion"));
+		S.HostMachine        = ParseStringField(InObj, TEXT("HostMachine"));
+
+		S.PakPatchMode = ParseStringField(InObj, TEXT("PakPatchMode"));
+
+		S.ExternalCompressType  = ParseStringField(InObj, TEXT("ExternalCompressType"));
+		S.ExternalCompressLevel = ParseInt32Field (InObj, TEXT("ExternalCompressLevel"), 0);
+
+		S.bUseSingleCompressMode = ParseBoolField (InObj, TEXT("bUseSingleCompressMode"), true);
+		S.MinSingleMatchScore    = ParseInt32Field(InObj, TEXT("MinSingleMatchScore"),    0);
+		S.bUseBigCacheMatch      = ParseBoolField (InObj, TEXT("bUseBigCacheMatch"),      false);
+		S.ThreadNum              = ParseInt32Field(InObj, TEXT("ThreadNum"),              0);
+		S.PatchStepMemSize       = ParseInt32Field(InObj, TEXT("PatchStepMemSize"),       0);
+
+		S.CheckFileHashType   = ParseStringField(InObj, TEXT("CheckFileHashType"));
+		S.bUsePerBlockDiff    = ParseBoolField  (InObj, TEXT("bUsePerBlockDiff"),    false);
+		S.bDoubleCheckEntry   = ParseBoolField  (InObj, TEXT("bDoubleCheckEntry"),   false);
+		S.bRecordSignToPatch  = ParseBoolField  (InObj, TEXT("bRecordSignToPatch"),  false);
+		S.bUseSignWriter      = ParseBoolField  (InObj, TEXT("bUseSignWriter"),      false);
+		S.bGenPakFileMD5      = ParseBoolField  (InObj, TEXT("bGenPakFileMD5"),      false);
+
+		S.bBinaryPatchIndexBlock         = ParseBoolField(InObj, TEXT("bBinaryPatchIndexBlock"),         false);
+		S.bBinaryPatchPathHashBlock      = ParseBoolField(InObj, TEXT("bBinaryPatchPathHashBlock"),      false);
+		S.bBinaryPatchFullDirectoryBlock = ParseBoolField(InObj, TEXT("bBinaryPatchFullDirectoryBlock"), false);
+		S.bBinaryPatchHeadBlock          = ParseBoolField(InObj, TEXT("bBinaryPatchHeadBlock"),          false);
+
+		S.bPrecachePatchDataOnSave = ParseBoolField(InObj, TEXT("bPrecachePatchDataOnSave"), false);
+		S.bPrecachePatchDataOnLoad = ParseBoolField(InObj, TEXT("bPrecachePatchDataOnLoad"), false);
+
+		S.PatchTaskThreadNum = ParseInt32Field(InObj, TEXT("PatchTaskThreadNum"), 0);
+
+		return S;
+	}
+}
+
+// ---- FPPatchBuildSettings ----
+
+void FPPatchBuildSettings::FillFromCurrentSettings()
+{
+	const UPPakPatcherSettings& S = UPPakPatcherSettings::Get();
+
+	// 元信息（CreatedAtUtc / PluginVersion / HostMachine 由 caller 在调用前后填，
+	// 但这里也给一份兜底，便于直接调用 FillFromCurrentSettings 也得到完整快照）
+	if (CreatedAtUtc.IsEmpty())
+	{
+		CreatedAtUtc = FDateTime::UtcNow().ToIso8601();
+	}
+	if (PatchFormatVersion == 0)
+	{
+		PatchFormatVersion = PRES_PATCH_FORMAT_VERSION;
+	}
+	if (HostMachine.IsEmpty())
+	{
+		HostMachine = FString::Printf(TEXT("%s/%s"),
+			FPlatformProcess::ComputerName(),
+			FPlatformProcess::UserName(false));
+	}
+
+	PakPatchMode = PakPatchModeToString(S.PakPatchMode);
+
+	ExternalCompressType  = ExternalCompressTypeToString(S.ExternalCompressType);
+	ExternalCompressLevel = S.ExternalCompressLevel;
+
+	bUseSingleCompressMode = S.bUseSingleCompressMode;
+	MinSingleMatchScore    = S.MinSingleMatchScore;
+	bUseBigCacheMatch      = S.bUseBigCacheMatch;
+	ThreadNum              = S.ThreadNum;
+	PatchStepMemSize       = S.PatchStepMemSize;
+
+	CheckFileHashType   = CheckFileHashTypeToString(S.CheckFileHashType);
+	bUsePerBlockDiff    = S.bUsePerBlockDiff;
+	bDoubleCheckEntry   = S.bDoubleCheckEntry;
+	bRecordSignToPatch  = S.bRecordSignToPatch;
+	bUseSignWriter      = S.bUseSignWriter;
+	bGenPakFileMD5      = S.bGenPakFileMD5;
+
+	bBinaryPatchIndexBlock         = S.bBinaryPatchIndexBlock;
+	bBinaryPatchPathHashBlock      = S.bBinaryPatchPathHashBlock;
+	bBinaryPatchFullDirectoryBlock = S.bBinaryPatchFullDirectoryBlock;
+	bBinaryPatchHeadBlock          = S.bBinaryPatchHeadBlock;
+
+	bPrecachePatchDataOnSave = S.bPrecachePatchDataOnSave;
+	bPrecachePatchDataOnLoad = S.bPrecachePatchDataOnLoad;
+
+	PatchTaskThreadNum = S.PatchTaskThreadNum;
 }
 
 void FPPatchManifestFile::Reset()
 {
+	SchemaVersion = PPATCH_MANIFEST_SCHEMA_VERSION;
 	OldAppVersion.Empty();
 	OldResVersion.Empty();
 	NewAppVersion.Empty();
@@ -105,7 +308,9 @@ void FPPatchManifestFile::Reset()
 	Platform.Empty();
 	DolphinChannelID.Empty();
 	PufferChannelID.Empty();
+	BuildSettings = FPPatchBuildSettings{};
 	ManifestFileItems.Empty();
+	SourceFilename.Empty();
 }
 
 void FPPatchManifestFile::AddItem(const FPPatchManifestFileItem& InItem)
@@ -139,8 +344,9 @@ bool FPPatchManifestFile::Load(const FString& InFilename)
 		return false;
 	}
 
-	SourceFilename = InFilename;
+	// LoadFromString 内部会 Reset（含清 SourceFilename），所以解析后再回填 SourceFilename。
 	const bool bOk = LoadFromString(JsonText);
+	SourceFilename = InFilename;
 	if (bOk)
 	{
 		UE_LOG(LogPPakPacher, Display,
@@ -177,6 +383,30 @@ bool FPPatchManifestFile::LoadFromString(const FString& InJsonText)
 	Platform         = ParseStringField(Root, TEXT("Platform"));
 	DolphinChannelID = ParseStringField(Root, TEXT("DolphinChannelID"));
 	PufferChannelID  = ParseStringField(Root, TEXT("PufferChannelID"));
+
+	// BuildSettings：v2 schema 起的可选字段。v1 manifest 缺失时保持默认值（不报错）。
+	const TSharedPtr<FJsonObject>* BuildSettingsObj = nullptr;
+	if (Root->TryGetObjectField(TEXT("BuildSettings"), BuildSettingsObj) && BuildSettingsObj)
+	{
+		BuildSettings = JsonToBuildSettings(*BuildSettingsObj);
+	}
+
+	// SchemaVersion 兼容性：缺失视为 1（最早的 schema）；超出当前版本时警告但仍尝试解析
+	int32 ParsedSchema = 1;
+	if (Root->TryGetNumberField(TEXT("SchemaVersion"), ParsedSchema))
+	{
+		SchemaVersion = ParsedSchema;
+		if (SchemaVersion > PPATCH_MANIFEST_SCHEMA_VERSION)
+		{
+			UE_LOG(LogPPakPacher, Warning,
+				TEXT("FPPatchManifestFile::LoadFromString - manifest SchemaVersion=%d > current=%d. Will attempt parse with current code; some new fields may be ignored."),
+				SchemaVersion, PPATCH_MANIFEST_SCHEMA_VERSION);
+		}
+	}
+	else
+	{
+		SchemaVersion = 1; // 旧 manifest 没有此字段，按 v1 处理
+	}
 
 	const TArray<TSharedPtr<FJsonValue>>* FileListArray = nullptr;
 	if (Root->TryGetArrayField(TEXT("FileList"), FileListArray) && FileListArray)
@@ -223,6 +453,9 @@ bool FPPatchManifestFile::SaveToString(FString& OutJsonText) const
 
 	TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
 
+	// SchemaVersion 必须放在最前，便于人工排查文件
+	Root->SetNumberField(TEXT("SchemaVersion"), PPATCH_MANIFEST_SCHEMA_VERSION);
+
 	Root->SetStringField(TEXT("OldAppVersion"),    OldAppVersion);
 	Root->SetStringField(TEXT("OldResVersion"),    OldResVersion);
 	Root->SetStringField(TEXT("NewAppVersion"),    NewAppVersion);
@@ -230,6 +463,9 @@ bool FPPatchManifestFile::SaveToString(FString& OutJsonText) const
 	Root->SetStringField(TEXT("Platform"),         Platform);
 	Root->SetStringField(TEXT("DolphinChannelID"), DolphinChannelID);
 	Root->SetStringField(TEXT("PufferChannelID"),  PufferChannelID);
+
+	// BuildSettings：v2 schema 起记录构建侧参数快照（仅诊断/审计，不影响 ApplyPatch）
+	Root->SetObjectField(TEXT("BuildSettings"), BuildSettingsToJson(BuildSettings));
 
 	TArray<TSharedPtr<FJsonValue>> FileListArray;
 	FileListArray.Reserve(ManifestFileItems.Num());

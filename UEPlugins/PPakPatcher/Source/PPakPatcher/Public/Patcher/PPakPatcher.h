@@ -5,6 +5,8 @@
 #include "Data/PResPatchData.h"
 #include "Data/PPakPatcherDataType.h"
 
+struct FPPakPatcherPerfReport;
+
 /*
  * FPPakPatcher : .pak 资源补丁器。入参只能是 .pak。
  * 处理完 .pak 如果存在同名的 .ucas/.utoc，会自动调用 FPIoStorePatcher 把 IoStore
@@ -28,9 +30,11 @@ public:
 	// -----------------------------------------------------------------------
 
 	bool CreateDiff(const FString& InPatchFilename, const FString& InNewPakFile, const FString& InOldPakFile, FPResPatchDataPtr& OutPatch,
-		EPPakPatchMode InMode = EPPakPatchMode::PakAware,
-		EPakPatchCompressType InCompressType = EPakPatchCompressType::None);
-	bool PatchDiff(const FString& InNewPakFilename, const FString& InOldPakFile, const FPResPatchDataPtr& InPatch);
+		EPPakPatchMode InMode = EPPakPatchMode::PakAwareDecryptAndCompress,
+		EPakPatchCompressType InCompressType = EPakPatchCompressType::None,
+		FPPakPatcherPerfReport* OutPerfReport = nullptr);
+	bool PatchDiff(const FString& InNewPakFilename, const FString& InOldPakFile, const FPResPatchDataPtr& InPatch,
+		FPPakPatcherPerfReport* OutPerfReport = nullptr);
 	bool CheckDiff(const FString& InNewPakFile, const FString& InOldPakFile, const FPResPatchDataPtr& InPatch);
 
 	// -----------------------------------------------------------------------
@@ -38,9 +42,11 @@ public:
 	// -----------------------------------------------------------------------
 
 	bool CreatePakDiff(const FString& InPatchFilename, const FPPakFileDataPtr& InNewPak, const FPPakFileDataPtr& InOldPak, FPResPatchDataPtr& OutPatch,
-		EPPakPatchMode InMode = EPPakPatchMode::PakAware,
-		EPakPatchCompressType InCompressType = EPakPatchCompressType::None);
-	bool PatchPak(const FString& InNewPakFilename, const FPPakFileDataPtr& InOldPak, const FPResPatchDataPtr& InPatch);
+		EPPakPatchMode InMode = EPPakPatchMode::PakAwareDecryptAndCompress,
+		EPakPatchCompressType InCompressType = EPakPatchCompressType::None,
+		FPPakPatcherPerfReport* OutPerfReport = nullptr);
+	bool PatchPak(const FString& InNewPakFilename, const FPPakFileDataPtr& InOldPak, const FPResPatchDataPtr& InPatch,
+		FPPakPatcherPerfReport* OutPerfReport = nullptr);
 	bool CheckPakDiff(const FPPakFileDataPtr& InNewPak, const FPPakFileDataPtr& InOldPak, const FPResPatchDataPtr& InPatch);
 
 private:

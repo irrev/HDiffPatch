@@ -6,6 +6,8 @@
 #include "Data/PPakPatcherDataType.h"
 #include "Data/PResPatchData.h"
 
+struct FPPakPatcherPerfReport;
+
 /**
  * FPResPatcher : 资源补丁统一入口。根据文件扩展名，分发到不同 Patcher：
  *   1. 非 Pak 资源（非 .pak/.utoc/.ucas）：调用 IPBinPatcher 生成补丁，结果存入 FPResPatchData.BinBody。
@@ -31,14 +33,17 @@ public:
 
 	/**
 	 * 生成差量补丁。根据新文件扩展名自动分发。
+	 * OutPerfReport: 可选，传入非空指针则把内部 PerfReport 累加到该对象（线程安全）。
 	 */
 	bool CreateDiff(const FString& InPatchFilename,
 		const FString& InNewFile, const FString& InOldFile,
 		FPResPatchDataPtr& OutPatch,
-		EPPakPatchMode InMode = EPPakPatchMode::PakAware,
-		EPakPatchCompressType InCompressType = EPakPatchCompressType::None);
+		EPPakPatchMode InMode = EPPakPatchMode::PakAwareDecryptAndCompress,
+		EPakPatchCompressType InCompressType = EPakPatchCompressType::None,
+		FPPakPatcherPerfReport* OutPerfReport = nullptr);
 
-	bool PatchDiff(const FString& InNewFile, const FString& InOldFile, const FPResPatchDataPtr& InPatch);
+	bool PatchDiff(const FString& InNewFile, const FString& InOldFile, const FPResPatchDataPtr& InPatch,
+		FPPakPatcherPerfReport* OutPerfReport = nullptr);
 
 	bool CheckDiff(const FString& InNewFile, const FString& InOldFile, const FPResPatchDataPtr& InPatch);
 
@@ -57,10 +62,12 @@ private:
 	bool CreateBinDiff(const FString& InPatchFilename,
 		const FString& InNewFile, const FString& InOldFile,
 		FPResPatchDataPtr& OutPatch,
-		EPakPatchCompressType InCompressType);
+		EPakPatchCompressType InCompressType,
+		FPPakPatcherPerfReport* OutPerfReport = nullptr);
 
 	/** Bin 文件回放：按 InPatch.BinBody 把 InOldFile 还原为 InNewFile。 */
-	bool PatchBin(const FString& InNewFile, const FString& InOldFile, const FPResPatchDataPtr& InPatch);
+	bool PatchBin(const FString& InNewFile, const FString& InOldFile, const FPResPatchDataPtr& InPatch,
+		FPPakPatcherPerfReport* OutPerfReport = nullptr);
 
 	/** Bin 文件回测：用 InPatch.BinBody 校验 (InNewFile, InOldFile) 是否一致。 */
 	bool CheckBinDiff(const FString& InNewFile, const FString& InOldFile, const FPResPatchDataPtr& InPatch);

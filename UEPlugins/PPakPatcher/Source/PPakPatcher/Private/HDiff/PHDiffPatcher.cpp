@@ -1,5 +1,6 @@
 #include "PHDiffPatcher.h"
 #include "PPakPatcherSettings.h"
+#include "Data/PPakPatcherDataType.h"
 
 #if USE_HDIFFPATCH
 #include <HDiffPatch.h>
@@ -79,13 +80,34 @@ bool FPHDiffPatcher::CreateDiff(uint8* InNew, uint64 InNewSize, uint8* InOld, ui
 #if USE_HDIFFPATCH
 	std::vector<unsigned char> StdTmp;
 
+	// HDiff SDK 实际只支持 None/ZLIB/LZMA/LZMA2/ZSTD 五种；LDEF/BZ2 未编译进 SDK，
+	// 强转传入会进入 HDiff 内部未定义分支并 abort。这里提前拦截、降级到 None。
+	EPakPatchCompressType EffectiveCompress = InCompressType;
+	if (EffectiveCompress == EPakPatchCompressType::LDEF
+	 || EffectiveCompress == EPakPatchCompressType::BZ2)
+	{
+		UE_LOG(LogPPakPacher, Warning,
+			TEXT("FPHDiffPatcher::CreateDiff - CompressType %s is not supported by HDiff SDK build, falling back to None"),
+			*UEnum::GetValueAsString(InCompressType));
+		EffectiveCompress = EPakPatchCompressType::None;
+	}
+
+	UE_LOG(LogPPakPacher, Display,
+		TEXT("FPHDiffPatcher::CreateDiff - Begin. NewSize=%llu OldSize=%llu CompressType=%s(req=%s) SingleMode=%d MinScore=%d StepMem=%d BigCache=%d ThreadNum=%d"),
+		InNewSize, InOldSize,
+		*UEnum::GetValueAsString(EffectiveCompress),
+		*UEnum::GetValueAsString(InCompressType),
+		bUseSingleCompressMode ? 1 : 0,
+		MinSingleMatchScore, PatchStepMemSize,
+		bUseBigCacheMatch ? 1 : 0, ThreadNum);
+
 	if (bUseSingleCompressMode)
 	{
 		HDiffPatch::CreateSingleCompressedDiff(
 			InNew, InNew + InNewSize,
 			InOld, InOld + InOldSize,
 			StdTmp,
-			(HDiffPatch::HDiffCompressionType)InCompressType,
+			(HDiffPatch::HDiffCompressionType)EffectiveCompress,
 			MinSingleMatchScore,
 			PatchStepMemSize,
 			bUseBigCacheMatch,
@@ -103,6 +125,12 @@ bool FPHDiffPatcher::CreateDiff(uint8* InNew, uint64 InNewSize, uint8* InOld, ui
 		OutDiff.SetNumUninitialized(StdTmp.size());
 		FMemory::Memcpy(OutDiff.GetData(), StdTmp.data(), StdTmp.size());
 	}
+
+	UE_LOG(LogPPakPacher, Display,
+		TEXT("FPHDiffPatcher::CreateDiff - Done. NewSize=%llu OldSize=%llu DiffSize=%llu CompressType=%s"),
+		InNewSize, InOldSize, (uint64)OutDiff.Num(),
+		*UEnum::GetValueAsString(EffectiveCompress));
+
 	return true;
 #else
 	return false;

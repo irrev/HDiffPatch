@@ -25,6 +25,6 @@ private:
 	bool LoadKeyChainFromEngineIni();
 	bool LoadKeyChainFromCommandline();
 
-	bool bLoadOnce = true;
+	bool bNeedsLoad = true;
 	FKeyChain KeyChain;
 };

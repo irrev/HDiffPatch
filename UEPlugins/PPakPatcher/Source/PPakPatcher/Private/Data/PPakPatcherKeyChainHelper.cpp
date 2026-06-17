@@ -42,9 +42,9 @@ bool FPPakPatcherKeyChainHelper::HasEncryptionKey()
 
 void FPPakPatcherKeyChainHelper::LoadKeyChain(bool bForceReload)
 {
-	if (bLoadOnce || bForceReload)
+	if (bNeedsLoad || bForceReload)
 	{
-		bLoadOnce = false;
+		bNeedsLoad = false;
 		KeyChain = FKeyChain();
 		
 #if WITH_EDITOR || IS_PROGRAM

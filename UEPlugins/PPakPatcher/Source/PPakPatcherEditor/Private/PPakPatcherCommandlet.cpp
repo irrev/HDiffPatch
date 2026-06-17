@@ -16,17 +16,6 @@ DEFINE_LOG_CATEGORY_STATIC(LogPakPatcherCommandlet, Display, All);
 
 namespace
 {
-	const TCHAR* PakAwarePreprocessToString(EPPakAwarePreprocess InValue)
-	{
-		switch (InValue)
-		{
-		case EPPakAwarePreprocess::NoDecrypt:            return TEXT("NoDecrypt");
-		case EPPakAwarePreprocess::DecryptAndCompress:   return TEXT("DecryptAndCompress");
-		case EPPakAwarePreprocess::DecryptAndDecompress: return TEXT("DecryptAndDecompress");
-		default:                                         return TEXT("Unknown");
-		}
-	}
-
 	const TCHAR* CheckFileHashTypeToString(EPPakCheckFileHashType InValue)
 	{
 		switch (InValue)
@@ -55,7 +44,7 @@ namespace
 void FPPakPatcherCommandletParams::Parse(const FString& Params)
 {
 	FString Value;
-	if (FParse::Value(*Params, TEXT("Compress="), Value))
+	if (FParse::Value(*Params, TEXT("CompressType="), Value))
 	{
 		Value = Value.TrimStartAndEnd();
 		if (Value.Equals(TEXT("None"), ESearchCase::IgnoreCase)) CompressType = EPakPatchCompressType::None;
@@ -69,8 +58,21 @@ void FPPakPatcherCommandletParams::Parse(const FString& Params)
 	if (FParse::Value(*Params, TEXT("Mode="), Value))
 	{
 		Value = Value.TrimStartAndEnd();
-		if (Value.Equals(TEXT("Binary"), ESearchCase::IgnoreCase)) PatchMode = EPPakPatchMode::Binary;
-        else if (Value.Equals(TEXT("PakAware"), ESearchCase::IgnoreCase)) PatchMode = EPPakPatchMode::PakAware;
+		if      (Value.Equals(TEXT("Binary"),                       ESearchCase::IgnoreCase)) PatchMode = EPPakPatchMode::Binary;
+		else if (Value.Equals(TEXT("PakAwareNoDecrypt"),            ESearchCase::IgnoreCase)) PatchMode = EPPakPatchMode::PakAwareNoDecrypt;
+		else if (Value.Equals(TEXT("PakAwareDecryptAndCompress"),   ESearchCase::IgnoreCase)) PatchMode = EPPakPatchMode::PakAwareDecryptAndCompress;
+		else if (Value.Equals(TEXT("PakAwareDecryptAndDecompress"), ESearchCase::IgnoreCase)) PatchMode = EPPakPatchMode::PakAwareDecryptAndDecompress;
+		// 简写别名（向后兼容旧测试脚本 / 习惯）
+		else if (Value.Equals(TEXT("NoDecrypt"),                    ESearchCase::IgnoreCase)) PatchMode = EPPakPatchMode::PakAwareNoDecrypt;
+		else if (Value.Equals(TEXT("DecryptAndCompress"),           ESearchCase::IgnoreCase)) PatchMode = EPPakPatchMode::PakAwareDecryptAndCompress;
+		else if (Value.Equals(TEXT("DecryptAndDecompress"),         ESearchCase::IgnoreCase)) PatchMode = EPPakPatchMode::PakAwareDecryptAndDecompress;
+		else if (Value.Equals(TEXT("PakAware"),                     ESearchCase::IgnoreCase)) PatchMode = EPPakPatchMode::PakAwareDecryptAndCompress;	// 旧值别名 → 默认 DAC
+		else
+		{
+			UE_LOG(LogPakPatcherCommandlet, Warning,
+				TEXT("Unknown -Mode value: %s. Allowed: Binary | PakAwareNoDecrypt | PakAwareDecryptAndCompress | PakAwareDecryptAndDecompress"),
+				*Value);
+		}
 	}
 	if (FParse::Value(*Params, TEXT("CheckMode="), Value))
 	{
@@ -80,27 +82,29 @@ void FPPakPatcherCommandletParams::Parse(const FString& Params)
         else if (Value.Equals(TEXT("Both"), ESearchCase::IgnoreCase)) CheckMode = EPPakUnitTestCheckMode::Both;
 	}
 
-	// -PakAwarePreprocess=NoDecrypt|DecryptAndCompress|DecryptAndDecompress
-	if (FParse::Value(*Params, TEXT("PakAwarePreprocess="), Value))
+	// -ExternalCompressType=None|Oodle_Selkie|Oodle_Mermaid|Oodle_Kraken|Oodle_Leviathan
+	if (FParse::Value(*Params, TEXT("ExternalCompressType="), Value))
 	{
 		Value = Value.TrimStartAndEnd();
-		if (Value.Equals(TEXT("NoDecrypt"), ESearchCase::IgnoreCase))
-		{
-			PakAwarePreprocessOverride = EPPakAwarePreprocess::NoDecrypt;
-		}
-		else if (Value.Equals(TEXT("DecryptAndCompress"), ESearchCase::IgnoreCase))
-		{
-			PakAwarePreprocessOverride = EPPakAwarePreprocess::DecryptAndCompress;
-		}
-		else if (Value.Equals(TEXT("DecryptAndDecompress"), ESearchCase::IgnoreCase))
-		{
-			PakAwarePreprocessOverride = EPPakAwarePreprocess::DecryptAndDecompress;
-		}
+		if      (Value.Equals(TEXT("None"),            ESearchCase::IgnoreCase)) ExternalCompressTypeOverride = EPPatchExternalCompressType::None;
+		else if (Value.Equals(TEXT("Oodle_Selkie"),    ESearchCase::IgnoreCase)) ExternalCompressTypeOverride = EPPatchExternalCompressType::Oodle_Selkie;
+		else if (Value.Equals(TEXT("Oodle_Mermaid"),   ESearchCase::IgnoreCase)) ExternalCompressTypeOverride = EPPatchExternalCompressType::Oodle_Mermaid;
+		else if (Value.Equals(TEXT("Oodle_Kraken"),    ESearchCase::IgnoreCase)) ExternalCompressTypeOverride = EPPatchExternalCompressType::Oodle_Kraken;
+		else if (Value.Equals(TEXT("Oodle_Leviathan"), ESearchCase::IgnoreCase)) ExternalCompressTypeOverride = EPPatchExternalCompressType::Oodle_Leviathan;
 		else
 		{
 			UE_LOG(LogPakPatcherCommandlet, Warning,
-				TEXT("Unknown -PakAwarePreprocess value: %s. Allowed: NoDecrypt | DecryptAndCompress | DecryptAndDecompress"),
+				TEXT("Unknown -ExternalCompressType value: %s. Allowed: None | Oodle_Selkie | Oodle_Mermaid | Oodle_Kraken | Oodle_Leviathan"),
 				*Value);
+		}
+	}
+
+	// -ExternalCompressLevel=0..9（int）
+	{
+		int32 LevelValue = 0;
+		if (FParse::Value(*Params, TEXT("ExternalCompressLevel="), LevelValue))
+		{
+			ExternalCompressLevelOverride = LevelValue;
 		}
 	}
 
@@ -150,6 +154,10 @@ void FPPakPatcherCommandletParams::Parse(const FString& Params)
 	{
 		MinMatchScoreOverride = IntValue;
 	}
+	if (FParse::Value(*Params, TEXT("PatchTaskThreadNum="), IntValue))
+	{
+		PatchTaskThreadNumOverride = IntValue;
+	}
 }
 
 void FPPakPatcherCommandletParams::Print()
@@ -158,10 +166,12 @@ void FPPakPatcherCommandletParams::Print()
 	UE_LOG(LogPakPatcherCommandlet, Display, TEXT("PatchMode: %s"),    *UEnum::GetValueAsString(PatchMode));
 	UE_LOG(LogPakPatcherCommandlet, Display, TEXT("CheckMode: %s"),    *UEnum::GetValueAsString(CheckMode));
 
-	LogOverrideOrIni(TEXT("PakAwarePreprocess"),    PakAwarePreprocessOverride,
-		PakAwarePreprocessOverride.IsSet() ? PakAwarePreprocessToString(PakAwarePreprocessOverride.GetValue()) : FString());
 	LogOverrideOrIni(TEXT("CheckFileHashType"),     CheckFileHashTypeOverride,
 		CheckFileHashTypeOverride.IsSet() ? CheckFileHashTypeToString(CheckFileHashTypeOverride.GetValue()) : FString());
+	LogOverrideOrIni(TEXT("ExternalCompressType"),  ExternalCompressTypeOverride,
+		ExternalCompressTypeOverride.IsSet() ? UEnum::GetValueAsString(ExternalCompressTypeOverride.GetValue()) : FString());
+	LogOverrideOrIni(TEXT("ExternalCompressLevel"), ExternalCompressLevelOverride,
+		ExternalCompressLevelOverride.IsSet() ? FString::FromInt(ExternalCompressLevelOverride.GetValue()) : FString());
 	LogOverrideOrIni(TEXT("bUseSingleCompressMode"),UseSingleCompressModeOverride,
 		UseSingleCompressModeOverride.IsSet() ? (UseSingleCompressModeOverride.GetValue() ? TEXT("true") : TEXT("false")) : FString());
 	LogOverrideOrIni(TEXT("bUseBigCacheMatch"),     UseBigCacheMatchOverride,
@@ -174,20 +184,27 @@ void FPPakPatcherCommandletParams::Print()
 		StepMemSizeOverride.IsSet() ? FString::Printf(TEXT("%d"), StepMemSizeOverride.GetValue()) : FString());
 	LogOverrideOrIni(TEXT("MinMatchScore"),         MinMatchScoreOverride,
 		MinMatchScoreOverride.IsSet() ? FString::Printf(TEXT("%d"), MinMatchScoreOverride.GetValue()) : FString());
+	LogOverrideOrIni(TEXT("PatchTaskThreadNum"),    PatchTaskThreadNumOverride,
+		PatchTaskThreadNumOverride.IsSet() ? FString::Printf(TEXT("%d"), PatchTaskThreadNumOverride.GetValue()) : FString());
 }
 
 void FPPakPatcherCommandletParams::ApplyOverridesToSettings() const
 {
 	UPPakPatcherSettings& S = UPPakPatcherSettings::Get();
 
-	if (PakAwarePreprocessOverride.IsSet())   S.PakAwarePreprocess     = PakAwarePreprocessOverride.GetValue();
+	// PatchMode 始终写入（commandlet 命令行的 -Mode= 或 Params 默认值）
+	S.PakPatchMode = PatchMode;
+
 	if (CheckFileHashTypeOverride.IsSet())    S.CheckFileHashType      = CheckFileHashTypeOverride.GetValue();
+	if (ExternalCompressTypeOverride.IsSet())  S.ExternalCompressType  = ExternalCompressTypeOverride.GetValue();
+	if (ExternalCompressLevelOverride.IsSet()) S.ExternalCompressLevel = ExternalCompressLevelOverride.GetValue();
 	if (UseSingleCompressModeOverride.IsSet())S.bUseSingleCompressMode = UseSingleCompressModeOverride.GetValue();
 	if (UseBigCacheMatchOverride.IsSet())     S.bUseBigCacheMatch      = UseBigCacheMatchOverride.GetValue();
 	if (DoubleCheckEntryOverride.IsSet())     S.bDoubleCheckEntry      = DoubleCheckEntryOverride.GetValue();
 	if (ThreadNumOverride.IsSet())            S.ThreadNum              = ThreadNumOverride.GetValue();
 	if (StepMemSizeOverride.IsSet())          S.PatchStepMemSize       = StepMemSizeOverride.GetValue();
 	if (MinMatchScoreOverride.IsSet())        S.MinSingleMatchScore    = MinMatchScoreOverride.GetValue();
+	if (PatchTaskThreadNumOverride.IsSet())   S.PatchTaskThreadNum     = PatchTaskThreadNumOverride.GetValue();
 
 	// HDiff 配置类字段会被 BinPatcher 在构造时拷到自己的成员里；此时 BinPatcher 已经 StartupModule 完成，
 	// 必须显式让 BinPatcher 重新拉取一次。
@@ -201,6 +218,39 @@ void FPPakPatcherCommandletParams::ApplyOverridesToSettings() const
 		{
 			BinPatcher->ReloadSettingsFromConfig();
 		}
+	}
+}
+
+void FPPakPatcherCommandletParams::WarnIrrelevantHDiffOverridesForApply(const TCHAR* InActionName) const
+{
+	// 这些 HDiff 参数仅 CreateDiff 时被 HDiff 算法使用；Apply 端透传到 Settings 是无害冗余，
+	// 但容易让用户误以为可以在 Apply 端调优 patch 性能（会发邮件问"为什么 -ThreadNum=16 没生效"）。
+	// 检测到时仅 warn，不阻断。
+	// 注意：StepMemSize 不在此列表 —— 它在 Apply 端会从 patch 元数据读取，
+	//      命令行透传相当于覆盖默认值，对没有该字段的旧 patch 仍生效；属于"半 Apply 端有意义"参数。
+	if (ThreadNumOverride.IsSet())
+	{
+		UE_LOG(LogPakPatcherCommandlet, Warning,
+			TEXT("[%s] -ThreadNum=%d is a CREATE-side HDiff param; ignored at Apply time (Apply uses patch metadata)."),
+			InActionName, ThreadNumOverride.GetValue());
+	}
+	if (MinMatchScoreOverride.IsSet())
+	{
+		UE_LOG(LogPakPatcherCommandlet, Warning,
+			TEXT("[%s] -MinMatchScore=%d is a CREATE-side HDiff param; ignored at Apply time."),
+			InActionName, MinMatchScoreOverride.GetValue());
+	}
+	if (UseBigCacheMatchOverride.IsSet())
+	{
+		UE_LOG(LogPakPatcherCommandlet, Warning,
+			TEXT("[%s] -bUseBigCacheMatch is a CREATE-side HDiff param; ignored at Apply time."),
+			InActionName);
+	}
+	if (UseSingleCompressModeOverride.IsSet())
+	{
+		UE_LOG(LogPakPatcherCommandlet, Warning,
+			TEXT("[%s] -NoSingleCompress is a CREATE-side HDiff param; the Apply-side mode is determined by the patch file metadata."),
+			InActionName);
 	}
 }
 
@@ -388,7 +438,7 @@ int32 UPPakPatcherCommandlet::CreatePakPatch(const FString& Params)
 	{
 		// directory mode.
 		UE_LOG(LogPakPatcherCommandlet, Display, TEXT("Create Pak Patch with DirectoryMode. Mode=%s"),
-			Input.PatchMode == EPPakPatchMode::Binary ? TEXT("Binary") : TEXT("PakAware"));
+			*UEnum::GetValueAsString(Input.PatchMode));
 
 		TArray<FPFileCompareInfo> FileCompareInfos = FPPakPatcherUtils::CompareDirectories(New, Old);
 		for (FPFileCompareInfo& Info : FileCompareInfos)
@@ -475,6 +525,7 @@ bool UPPakPatcherCommandlet::CreatePakPatch_Internal(const FString& InNewPakFile
 int32 UPPakPatcherCommandlet::CheckPakPatch(const FString& Params)
 {
 	UE_LOG(LogPakPatcherCommandlet, Display, TEXT("Begin Check Pak Patch."));
+	Input.WarnIrrelevantHDiffOverridesForApply(TEXT("CheckPakPatch"));
 
 	FString NewPakFilename;
 	FString OldPakFilename;
@@ -524,6 +575,7 @@ int32 UPPakPatcherCommandlet::CheckPakPatch(const FString& Params)
 int32 UPPakPatcherCommandlet::PatchPak(const FString& Params)
 {
 	UE_LOG(LogPakPatcherCommandlet, Display, TEXT("Begin Patch Pak."));
+	Input.WarnIrrelevantHDiffOverridesForApply(TEXT("PatchPak"));
 
 
 	FString NewPakFilename;
@@ -609,7 +661,7 @@ int32 UPPakPatcherCommandlet::CreatePakPatchWithDir(const FString& Params)
 	//   - 自动按 chunk 名匹配新旧 .pak（含 IoStore 同伴文件联动）
 	//   - 自动按 New/Old MD5 判定 DiffType（Equal/Modify/Add/Delete）
 	//   - 自动产出 patch_manifest.txt
-	if (!FPPatchManager::Get().CreatePatch(OldDir, NewDir, PatchDir))
+	if (!FPPatchManager::Get().CreatePatch(OldDir, NewDir, PatchDir, Input.CompressType))
 	{
 		UE_LOG(LogPakPatcherCommandlet, Error,
 			TEXT("CreatePakPatchWithDir failed. New:%s Old:%s Patch:%s"), *NewDir, *OldDir, *PatchDir);
@@ -627,6 +679,7 @@ int32 UPPakPatcherCommandlet::CreatePakPatchWithDir(const FString& Params)
 int32 UPPakPatcherCommandlet::PatchPakPatchWithDir(const FString& Params)
 {
 	UE_LOG(LogPakPatcherCommandlet, Display, TEXT("Begin PatchPakPatchWithDir."));
+	Input.WarnIrrelevantHDiffOverridesForApply(TEXT("PatchPakPatchWithDir"));
 
 	FString ResDir;
 	FString PatchDir;

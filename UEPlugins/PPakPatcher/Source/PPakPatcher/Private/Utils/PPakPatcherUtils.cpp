@@ -8,66 +8,42 @@
 
 bool FPPakPatcherUtils::LoadFileToBuffer(const FString& InFileName, TArray<uint8>& OutBuffer)
 {
-	FArchive* Reader = IFileManager::Get().CreateFileReader(*InFileName, EFileRead::FILEREAD_None);
+	TUniquePtr<FArchive> Reader(IFileManager::Get().CreateFileReader(*InFileName, EFileRead::FILEREAD_None));
 	if (!Reader)
 	{
 		return false;
 	}
 
-	if (Reader->Tell() != 0)
-	{
-		UE_LOG(LogPPakPacher, Warning, TEXT("Archive '%s' has already been read from."), *InFileName);
-		return false;
-	}
-
 	OutBuffer.Empty();
-	int64 Size = Reader->TotalSize();
+	const int64 Size = Reader->TotalSize();
 	if (Size == 0)
 	{
 		return true;
 	}
 
-	if (Reader->Tell() != 0)
-	{
-		UE_LOG(LogPPakPacher, Warning, TEXT("Archive '%s' has already been read from."), *InFileName);
-		return false;
-	}
 	OutBuffer.SetNumZeroed(Size);
 	Reader->Serialize(OutBuffer.GetData(), Size);
-	bool Success = Reader->Close();
-	return Success;
+	return Reader->Close();
 }
 
 bool FPPakPatcherUtils::LoadFileToBuffer(const FString& InFileName, TArray64<uint8>& OutBuffer)
 {
-	FArchive* Reader = IFileManager::Get().CreateFileReader(*InFileName, EFileRead::FILEREAD_None);
+	TUniquePtr<FArchive> Reader(IFileManager::Get().CreateFileReader(*InFileName, EFileRead::FILEREAD_None));
 	if (!Reader)
 	{
 		return false;
 	}
 
-	if (Reader->Tell() != 0)
-	{
-		UE_LOG(LogPPakPacher, Warning, TEXT("Archive '%s' has already been read from."), *InFileName);
-		return false;
-	}
-
 	OutBuffer.Empty();
-	int64 Size = Reader->TotalSize();
+	const int64 Size = Reader->TotalSize();
 	if (Size == 0)
 	{
 		return true;
 	}
 
-	if (Reader->Tell() != 0)
-	{
-		UE_LOG(LogPPakPacher, Warning, TEXT("Archive '%s' has already been read from."), *InFileName);
-		return false;
-	}
 	OutBuffer.SetNumZeroed(Size);
 	Reader->Serialize(OutBuffer.GetData(), Size);
-	bool Success = Reader->Close();
-	return Success;
+	return Reader->Close();
 }
 
 bool FPPakPatcherUtils::DumpMemoryToFile(const FString& InFilename, uint8* InData, int64 InSize)
@@ -95,13 +71,12 @@ int32 FPPakPatcherUtils::CalculateFileCrc32(const FString& InFilename, TArray<ui
 	}
 
 	uint32 FileCRC = 0;
-	FArchive* Ar = IFileManager::Get().CreateFileReader(*InFilename);
+	TUniquePtr<FArchive> Ar(IFileManager::Get().CreateFileReader(*InFilename));
 	if (Ar)
 	{
 		const int64 Size = Ar->TotalSize();
 		int64 Position = 0;
 
-		// Read in BufferSize chunks
 		while (Position < Size)
 		{
 			const auto ReadNum = FMath::Min(Size - Position, (int64)Buffer.Num());
@@ -109,7 +84,6 @@ int32 FPPakPatcherUtils::CalculateFileCrc32(const FString& InFilename, TArray<ui
 			FileCRC = FCrc::MemCrc32(Buffer.GetData(), ReadNum, FileCRC);
 			Position += ReadNum;
 		}
-		delete Ar;
 	}
 	return FileCRC;
 }
@@ -136,6 +110,60 @@ uint32 FPPakPatcherUtils::CalculateFileCrc32(const FString& InFilename)
 	}
 	TArray<uint8> Buffer;
 	return static_cast<uint32>(CalculateFileCrc32(InFilename, Buffer));
+}
+
+bool FPPakPatcherUtils::CalculateFileHashesAndSize(const FString& InFilename,
+	FString& OutMD5, uint32& OutCRC32, int64& OutSize)
+{
+	OutMD5.Reset();
+	OutCRC32 = 0;
+	OutSize = 0;
+
+	if (InFilename.IsEmpty() || !IFileManager::Get().FileExists(*InFilename))
+	{
+		return false;
+	}
+
+	TUniquePtr<FArchive> Ar(IFileManager::Get().CreateFileReader(*InFilename));
+	if (!Ar)
+	{
+		return false;
+	}
+
+	const int64 Size = Ar->TotalSize();
+	OutSize = Size;
+	if (Size == 0)
+	{
+		// 空文件：MD5 / CRC32 都按"无内容"算（FMD5 finalize 给定空数据有标准结果，CRC32=0）
+		FMD5 MD5;
+		FMD5Hash MD5Result;
+		MD5Result.Set(MD5);
+		OutMD5 = LexToString(MD5Result);
+		OutCRC32 = 0;
+		return Ar->Close();
+	}
+
+	// 单 pass：同时 feed MD5 + CRC32
+	FMD5 MD5;
+	uint32 Crc = 0;
+	TArray<uint8> Buffer;
+	Buffer.SetNumUninitialized(64 * 1024);
+
+	int64 Position = 0;
+	while (Position < Size)
+	{
+		const int64 ReadNum = FMath::Min(Size - Position, (int64)Buffer.Num());
+		Ar->Serialize(Buffer.GetData(), ReadNum);
+		MD5.Update(Buffer.GetData(), ReadNum);
+		Crc = FCrc::MemCrc32(Buffer.GetData(), ReadNum, Crc);
+		Position += ReadNum;
+	}
+
+	FMD5Hash MD5Result;
+	MD5Result.Set(MD5);
+	OutMD5 = LexToString(MD5Result);
+	OutCRC32 = Crc;
+	return Ar->Close();
 }
 
 bool FPPakPatcherUtils::VerifyFileHashByCheckType(const FString& InFilename,

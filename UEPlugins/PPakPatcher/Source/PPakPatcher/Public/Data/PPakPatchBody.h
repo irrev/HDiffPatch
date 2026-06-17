@@ -16,11 +16,30 @@ public:
 	int64 NewSize = 0;
 	int64 OldOffset = 0;
 	int64 OldSize = 0;
-	int64 DataOffset = 0;   // 在 FPResPatchData::Data 里的偏移
-	int64 DataSize = 0;     // DataBlock 里实际承载的字节数（差量字节数 或 full data 字节数）
+	int64 DataOffset = 0;       // 在 FPResPatchData::Data 池 / 磁盘 DataBlock 内的偏移
+	int64 DataSize = 0;         // 该条记录原始（解压后）字节数；HDiff Patch 时需要这个长度
+	int64 CompressedSize = 0;   // 该条记录在 Data 池 / 磁盘上实际占用的字节数。
+	                            //   == DataSize 表示该条未压缩（直接 memcpy）；
+	                            //   < DataSize 表示已被 Oodle 压缩（GetFilePatchData 时按需解压）。
+	                            //   v8 起每条记录独立压缩（不再使用整 DataBlock 切块压缩）。
 
 	void Serialize(FArchive& Ar);
 	bool IsEqual(FPPakPatchDataInfo& Other);
+};
+
+// -----------------------------------------------------------------------------
+// v6: 单个 CompressionBlock 的 patch 描述
+// 当 NewEntry/OldEntry 的 CompressionBlocks 数量一致时，可按 block 粒度做 diff/patch，
+// 大幅降低 PatchPak 运行时单 entry 的工作集（≈ 1 block）。
+// -----------------------------------------------------------------------------
+
+class PPAKPATCHER_API FPPakBlockPatchInfo
+{
+public:
+	FPPakPatchDataInfo BlockPatchData;
+
+	void Serialize(FArchive& Ar);
+	bool IsEqual(FPPakBlockPatchInfo& Other);
 };
 
 // -----------------------------------------------------------------------------
@@ -38,6 +57,13 @@ public:
 	FPPakPatchDataInfo DataInfo;
 
 	FPakEntry Entry;
+
+	/**
+	 * v6: per-block diff 数组。非空表示按 CompressionBlock 粒度 diff/patch，
+	 * 此时 DataInfo.bIsPatchData/DataSize 不被使用；空数组表示走整 entry HDiff（DataInfo 有效）。
+	 * 仅 PakAware DAC 模式 + Modify 类型 + New/Old block 数一致时启用。
+	 */
+	TArray<FPPakBlockPatchInfo> BlockPatches;
 
 	void Serialize(FArchive& Ar);
 	bool IsEqual(FPPakFilePatchInfo& Other);

@@ -2,6 +2,8 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Data/PPakPatcherDataType.h"
+#include <atomic>
 
 class FPUpdateManifestSummary;
 class FPPatchManifestFile;
@@ -58,7 +60,8 @@ public:
 	 *
 	 * @return true 表示全部条目处理成功；任一 Modify 失败即 false。
 	 */
-	bool CreatePatch(const FString& InOldDir, const FString& InNewDir, const FString& InPatchDir);
+	bool CreatePatch(const FString& InOldDir, const FString& InNewDir, const FString& InPatchDir,
+		EPakPatchCompressType InCompressType = EPakPatchCompressType::None);
 
 	// =====================================================================
 	// 运行侧：应用补丁
@@ -86,7 +89,8 @@ public:
 	 * 用途：
 	 *   - 评估"是否值得打补丁"：若本地 Old 资源损坏或被篡改，PatchDiff 必定失败，
 	 *     不如提前用本函数判定，让上层决定是"重新下载完整 New" 还是"打补丁"
-	 *   - 与 ApplyPatch 解耦：本函数纯比对，无文件 IO，开销极低
+	 *   - 与 ApplyPatch 解耦：本函数仅读取 patch_manifest.txt 一次 + 用外部传入的 CRC 表比对，
+	 *     **不读取**实际资源文件（CRC 由 caller 在资源更新层一次性计算好），开销极低
 	 *
 	 * 校验对象：DiffType=Modify / Delete 条目的 Old 文件（这两类需要本地 Old 存在；
 	 *           Add 此时本就没对应 Old；Equal 跳过——补丁前后都一样）
@@ -120,7 +124,14 @@ public:
 		const TMap<FString /*FileName*/, uint32 /*CRC*/>& InActualCrcMap,
 		bool bAllowMissing = false) const;
 
+	/** 获取当前进度百分比。 */
+	void GetPercentage(int32& OutCurrent, int32& OutTotal, float& OutPercentage) const;
+
 private:
+	// 进度追踪（线程安全）
+	std::atomic<int32> ProgressCurrent{0};
+	std::atomic<int32> ProgressTotal{0};
+
 	/** 一致性检查：patch 与本地资源在版本/平台/渠道上是否匹配。 */
 	bool CheckCompatibility(const FPPatchManifestFile& InPatchManifest,
 		const FPUpdateManifestSummary& InResSummary) const;

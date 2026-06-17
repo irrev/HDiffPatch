@@ -14,22 +14,24 @@
 *  通用可选参数（所有 Action 均可追加；未指定时使用 DefaultPPakPatcher.ini 的配置默认值；
 *  以下所有 -Xxx=... 命令行覆盖只在当前 commandlet 进程内生效，不写回 ini）
 *  -----------------------------------------------------------------------------------------------------
-*    -Mode=Binary|PakAware            生产/校验模式；缺省 PakAware（仅对 -CreatePakPatch 与 -CreatePakPatchWithDir
-*                                     生效；Check/Patch 端从 patch 头部自动读出，无需指定）
+*    -Mode=Binary|                    生产/校验模式（合并了原 -Mode + -PakAwarePreprocess）；
+*       PakAwareNoDecrypt|              缺省 PakAwareDecryptAndCompress（仅对 -CreatePakPatch /
+*       PakAwareDecryptAndCompress|     -CreatePakPatchWithDir 生效；Check/Patch 端从 patch 头部自动读出，
+*       PakAwareDecryptAndDecompress    无需指定）
+*                                     旧别名（兼容）：PakAware → PakAwareDecryptAndCompress；
+*                                       NoDecrypt / DecryptAndCompress / DecryptAndDecompress 也可单独传。
+*                                     该值持久化到 patch Header，运行时 PatchPak 自动按相同 Mode 反向重组。
 *    -Compress=None|ZLIB|LZMA|LZMA2|  HDiff 输出补丁的压缩算法；缺省 None
 *              ZSTD|LDEF|BZ2          （仅 -CreatePakPatch / -CreatePakPatchWithDir 在 CreateDiff 时使用）
-*    -PakAwarePreprocess=NoDecrypt|   PakAware 模式下 entry 字节流预处理策略；命令行覆盖 ini 配置（仅生成侧使用）
-*       DecryptAndCompress|             NoDecrypt              对原始磁盘字节做 HDiff（已实装；默认）
-*       DecryptAndDecompress            DecryptAndCompress     解密后在压缩字节上做 HDiff（【未实装】，回退并 warning）
-*                                       DecryptAndDecompress   解密+解压后做 HDiff（【未实装】，回退并 warning）
-*                                     该值持久化到补丁文件 Header；运行时 PatchPak 校验，不匹配直接报错。
 *    -CheckFileHashType=None|Crc32|   运行时校验旧/新文件哈希的算法；构建侧始终同时写 MD5+CRC32 到 Header，
 *                       MD5            运行时按本参数选择性校验。缺省 Crc32。
 *    -NoSingleCompress                关闭 HDiff 的 SingleCompressed 模式（等价 bUseSingleCompressMode=false）；
 *                                     缺省开启。注意：生成端与校验/打补丁端必须保持一致，否则 Check/Patch 会失败
 *    -ThreadNum=<n>                   HDiff 多线程数；缺省 1
 *    -StepMemSize=<bytes>             HDiff 流式 patch 步长（运行时打补丁的内存上限）；缺省 262144 (256K)
-*    -MinMatchScore=<n>               HDiff 单文件匹配评分；bin: 0~4, text: 4~9；缺省 6
+*    -MinMatchScore=<n>               HDiff 单文件匹配评分；bin: 0~4, text: 4~9；缺省 0
+*                                     （HDiff 上游 default=6；本项目按 crypto-full 实测结果改为 0：
+*                                       score=0 vs 6 patch -0.515% / Create wall +2.7%）
 *    -bUseBigCacheMatch               HDiff 大缓存匹配（O(oldSize) 内存换匹配速度）；缺省关闭
 *    -bDoubleCheckEntry               PatchPak 时对 OldPak entry 做二次校验（默认开启）；
 *    -NoDoubleCheckEntry              关闭二次校验
@@ -140,7 +142,7 @@ enum class EPPakUnitTestCheckMode : uint8
 
 struct FPPakPatcherCommandletParams
 {
-	EPPakPatchMode PatchMode = EPPakPatchMode::PakAware;
+	EPPakPatchMode PatchMode = EPPakPatchMode::PakAwareDecryptAndCompress;
 	EPPakUnitTestCheckMode CheckMode = EPPakUnitTestCheckMode::Both;
 	EPakPatchCompressType CompressType = EPakPatchCompressType::ZLIB;
 
@@ -148,20 +150,33 @@ struct FPPakPatcherCommandletParams
 	// 命令行覆盖 Settings 的字段（TOptional：未传 = 使用 ini 默认值；传了 = 覆盖）
 	//   命令行覆盖只在当前 commandlet 进程内生效，不会写回 ini 文件。
 	// -----------------------------------------------------------------------
-	TOptional<EPPakAwarePreprocess>     PakAwarePreprocessOverride;
 	TOptional<EPPakCheckFileHashType>   CheckFileHashTypeOverride;
+	TOptional<EPPatchExternalCompressType> ExternalCompressTypeOverride;  // -ExternalCompressType=Oodle_Mermaid
+	TOptional<int32>  ExternalCompressLevelOverride;   // -ExternalCompressLevel=
 	TOptional<bool>   UseSingleCompressModeOverride;   // -NoSingleCompress  → false
 	TOptional<bool>   UseBigCacheMatchOverride;        // -bUseBigCacheMatch → true
 	TOptional<bool>   DoubleCheckEntryOverride;        // -bDoubleCheckEntry / -NoDoubleCheckEntry
 	TOptional<int32>  ThreadNumOverride;               // -ThreadNum=
 	TOptional<int32>  StepMemSizeOverride;             // -StepMemSize=
 	TOptional<int32>  MinMatchScoreOverride;           // -MinMatchScore=
+	TOptional<int32>  PatchTaskThreadNumOverride;      // -PatchTaskThreadNum=
 
 	void Parse(const FString& Params);
 	void Print();
 
 	/** 把所有 Override 应用到 UPPakPatcherSettings 单例（仅当 IsSet 时写入；HDiff 配置同时刷到 BinPatcher）。 */
 	void ApplyOverridesToSettings() const;
+
+	/**
+	 * 修复 #26：在 Apply 端（PatchPak / PatchPakPatchWithDir / CheckPakPatch）action 入口
+	 * 检查并 warn：用户传入的某些 HDiff 参数仅在 Create 端有效（StepMemSize 例外，
+	 * Apply 端会从 patch 元数据读取，命令行透传是无害冗余）。
+	 *   - ThreadNum / MinMatchScore / bUseBigCacheMatch / NoSingleCompress
+	 *   - 这些参数仅 CreateDiff 时被 HDiff 算法使用；Apply 端透传到 Settings 仅作为冗余字段
+	 *     不影响行为，但容易让用户误以为可以在 Apply 端改进性能。
+	 * 检测到时打 Warning（不阻断），并给出明确解释。
+	 */
+	void WarnIrrelevantHDiffOverridesForApply(const TCHAR* InActionName) const;
 };
 
 UCLASS()

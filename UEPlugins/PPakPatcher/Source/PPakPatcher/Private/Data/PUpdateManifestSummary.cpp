@@ -85,6 +85,7 @@ void FPUpdateManifestSummary::Reset()
 	DolphinChannelID.Empty();
 	PufferChannelID.Empty();
 	ManifestFileItems.Empty();
+	SourceFilename.Empty();
 }
 
 bool FPUpdateManifestSummary::Load(const FString& InFilename)
@@ -108,8 +109,10 @@ bool FPUpdateManifestSummary::Load(const FString& InFilename)
 		return false;
 	}
 
-	SourceFilename = InFilename;
+	// 缓存来源文件名（LoadFromString 内部会 Reset 清空它，所以解析完成后再回填）；
+	// 解析失败时也要回填，方便错误日志展示来源
 	const bool bOk = LoadFromString(JsonText);
+	SourceFilename = InFilename;
 	if (bOk)
 	{
 		UE_LOG(LogPPakPacher, Display,

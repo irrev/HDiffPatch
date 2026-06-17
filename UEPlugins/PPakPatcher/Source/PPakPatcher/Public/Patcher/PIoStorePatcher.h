@@ -4,6 +4,8 @@
 #include "Data/PResPatchData.h"
 #include "Data/PPakPatcherDataType.h"
 
+struct FPPakPatcherPerfReport;
+
 /**
  * FPIoStorePatcher : 处理与 .pak 同名同目录的 .utoc + .ucas（IoStore 容器）。
  *
@@ -29,11 +31,18 @@ public:
 	 * 给 InOutPatch（已经是 Pak/IoStore 类型）追加/填充 IoStore body。
 	 *   - 若 IoStoreBody 已存在则直接写入；不存在则懒加载分配。
 	 *   - InOutPatch 的 Header.Type 不会被修改（外层 Pak 流程仍可保持 Pak）。
+	 *   - OutModifyPhysicalSize（可选）：累加 Modify chunk 在 new ucas 中的物理字节数，
+	 *     供调用方填入 PerfReport.IoStoreModifyPhysicalSize。
+	 *   - InOutPerfReport（可选）：累加 IoStore 部分的 Read/Decrypt/Decompress/Diff 等耗时。
 	 */
-	bool CreateIoStoreDiff(const FString& InPakNewFile, const FString& InPakOldFile, FPResPatchData& InOutPatch);
+	bool CreateIoStoreDiff(const FString& InPakNewFile, const FString& InPakOldFile, FPResPatchData& InOutPatch,
+		int64* OutModifyPhysicalSize = nullptr,
+		FPPakPatcherPerfReport* InOutPerfReport = nullptr,
+		EPakPatchCompressType InCompressType = EPakPatchCompressType::None);
 
-	/** 应用 IoStore 部分到磁盘（产出 New .utoc/.ucas） */
-	bool PatchIoStore(const FString& InPakNewFile, const FString& InPakOldFile, const FPResPatchData& InPatch);
+	/** 应用 IoStore 部分到磁盘（产出 New .utoc/.ucas）。InOutPerfReport 可选，累加 IoStore 阶段耗时。 */
+	bool PatchIoStore(const FString& InPakNewFile, const FString& InPakOldFile, const FPResPatchData& InPatch,
+		FPPakPatcherPerfReport* InOutPerfReport = nullptr);
 
 	/** 校验 IoStore 部分（回测） */
 	bool CheckIoStoreDiff(const FString& InPakNewFile, const FString& InPakOldFile, const FPResPatchData& InPatch);

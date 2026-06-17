@@ -6,10 +6,19 @@
 #include "Data/PPakPatcherDataType.h"   // LogPPakPacher
 #include "Patcher/FPResPatcher.h"
 #include "Utils/PPakPatcherUtils.h"
+#include "PPakPatcherSettings.h"
 
 #include "Misc/LazySingleton.h"
 #include "Misc/Paths.h"
 #include "HAL/FileManager.h"
+#include "Utils/PPakPatcherPerfReport.h"
+#include "Utils/PPakPatcherTaskRunner.h"
+#include "Dom/JsonObject.h"
+#include "Serialization/JsonSerializer.h"
+#include "Serialization/JsonWriter.h"
+#include "Misc/FileHelper.h"
+
+#include <atomic>
 
 namespace
 {
@@ -139,6 +148,13 @@ void FPPatchManager::TearDown()
 	TLazySingleton<FPPatchManager>::TearDown();
 }
 
+void FPPatchManager::GetPercentage(int32& OutCurrent, int32& OutTotal, float& OutPercentage) const
+{
+	OutCurrent = ProgressCurrent.load(std::memory_order_relaxed);
+	OutTotal   = ProgressTotal.load(std::memory_order_relaxed);
+	OutPercentage = (OutTotal > 0) ? FMath::Clamp((float)OutCurrent / (float)OutTotal, 0.0f, 1.0f) : 0.0f;
+}
+
 FString FPPatchManager::ExtractChunkName(const FString& InFilename)
 {
 	return ExtractChunkNameImpl(InFilename);
@@ -198,10 +214,15 @@ bool FPPatchManager::CheckCompatibility(const FPPatchManifestFile& InPatchManife
 // CreatePatch
 // =========================================================================
 
-bool FPPatchManager::CreatePatch(const FString& InOldDir, const FString& InNewDir, const FString& InPatchDir)
+bool FPPatchManager::CreatePatch(const FString& InOldDir, const FString& InNewDir, const FString& InPatchDir,
+	EPakPatchCompressType InCompressType)
 {
-	UE_LOG(LogPPakPacher, Display, TEXT("FPPatchManager::CreatePatch - Begin. Old:%s New:%s Patch:%s"),
-		*InOldDir, *InNewDir, *InPatchDir);
+	UE_LOG(LogPPakPacher, Display,
+		TEXT("FPPatchManager::CreatePatch - Begin. Old:%s New:%s Patch:%s CompressType=%s PatchMode=%s PatchTaskThreadNum=%d"),
+		*InOldDir, *InNewDir, *InPatchDir,
+		*UEnum::GetValueAsString(InCompressType),
+		*UEnum::GetValueAsString(UPPakPatcherSettings::Get().PakPatchMode),
+		UPPakPatcherSettings::Get().PatchTaskThreadNum);
 
 	// step 1 : 加载新旧资源 manifest
 	FPUpdateManifestSummary OldSummary, NewSummary;
@@ -232,23 +253,40 @@ bool FPPatchManager::CreatePatch(const FString& InOldDir, const FString& InNewDi
 	PatchManifest.DolphinChannelID = NewSummary.DolphinChannelID;
 	PatchManifest.PufferChannelID  = NewSummary.PufferChannelID;
 
+	// 写入构建参数快照（仅诊断/审计，不影响 ApplyPatch；详见 FPPatchBuildSettings）
+	PatchManifest.BuildSettings.FillFromCurrentSettings();
+
 	FPResPatcher ResPatcher;
 	int32 NumModify = 0, NumAdd = 0, NumEqual = 0, NumDelete = 0, NumFailed = 0;
 
-	// ---- Helper: 填充一个 Entry 的 hash 信息 ----
+	// Modify 任务队列（CreateDiff 是热点，循环结束后按 PatchTaskThreadNum 并发执行）
+	struct FModifyTask
+	{
+		FPPatchManifestFileItem Item;
+		FString PatchFullPath;
+		FString PatchBaseName;
+		FString NewPak;
+		FString OldPak;
+	};
+	TArray<FModifyTask> ModifyTasks;
+
+	// ---- Helper: 填充 Entry 的 hash 信息（单 pass MD5+CRC32+Size，避免 3 次全文件 IO）----
 	auto FillEntryHash = [](FPPatchManifestFileEntry& OutEntry, const FString& InFilePath)
 	{
 		OutEntry.FileName = FPaths::GetCleanFilename(InFilePath);
-		OutEntry.NewMD5   = FPPakPatcherUtils::CalculateFileMD5String(InFilePath);
-		OutEntry.NewCRC   = FPPakPatcherUtils::CalculateFileCrc32(InFilePath);
-		OutEntry.NewSize  = IFileManager::Get().FileSize(*InFilePath);
+		FPPakPatcherUtils::CalculateFileHashesAndSize(InFilePath, OutEntry.NewMD5, OutEntry.NewCRC, OutEntry.NewSize);
 	};
 	auto FillEntryOldHash = [](FPPatchManifestFileEntry& OutEntry, const FString& InFilePath)
 	{
 		OutEntry.FileName = FPaths::GetCleanFilename(InFilePath);
-		OutEntry.OldMD5   = FPPakPatcherUtils::CalculateFileMD5String(InFilePath);
-		OutEntry.OldCRC   = FPPakPatcherUtils::CalculateFileCrc32(InFilePath);
-		OutEntry.OldSize  = IFileManager::Get().FileSize(*InFilePath);
+		FPPakPatcherUtils::CalculateFileHashesAndSize(InFilePath, OutEntry.OldMD5, OutEntry.OldCRC, OutEntry.OldSize);
+	};
+	// 同时填充新旧两侧（避免 .pak 主分支重复扫描 NewPak）
+	auto FillEntryBothHashes = [](FPPatchManifestFileEntry& OutEntry, const FString& InNewPath, const FString& InOldPath)
+	{
+		OutEntry.FileName = FPaths::GetCleanFilename(InNewPath);
+		FPPakPatcherUtils::CalculateFileHashesAndSize(InNewPath, OutEntry.NewMD5, OutEntry.NewCRC, OutEntry.NewSize);
+		FPPakPatcherUtils::CalculateFileHashesAndSize(InOldPath, OutEntry.OldMD5, OutEntry.OldCRC, OutEntry.OldSize);
 	};
 
 	// step 6 : 遍历 New .pak，按 chunk 匹配 Old 生成补丁
@@ -321,12 +359,7 @@ bool FPPatchManager::CreatePatch(const FString& InOldDir, const FString& InNewDi
 
 		// ---- .pak 的 DiffType ----
 		Item.Pak.FileName = NewFileName;
-		FillEntryHash(Item.Pak, NewPak);
-		FillEntryOldHash(Item.Pak, OldPak);
-		// 合并 New hash 到同一 Entry（FillEntryOldHash 只写 Old*，需要把 New 也填上）
-		Item.Pak.NewMD5  = FPPakPatcherUtils::CalculateFileMD5String(NewPak);
-		Item.Pak.NewCRC  = FPPakPatcherUtils::CalculateFileCrc32(NewPak);
-		Item.Pak.NewSize = IFileManager::Get().FileSize(*NewPak);
+		FillEntryBothHashes(Item.Pak, NewPak, OldPak);
 
 		if (Item.Pak.OldMD5 == Item.Pak.NewMD5)
 			Item.Pak.DiffType = EPFileCompareDiffType::Equal;
@@ -337,12 +370,8 @@ bool FPPatchManager::CreatePatch(const FString& InOldDir, const FString& InNewDi
 		if (bNewUtocExists && bOldUtocExists)
 		{
 			Item.Utoc.FileName = FPaths::GetCleanFilename(NewUtoc);
-			Item.Utoc.OldMD5  = FPPakPatcherUtils::CalculateFileMD5String(OldUtoc);
-			Item.Utoc.OldCRC  = FPPakPatcherUtils::CalculateFileCrc32(OldUtoc);
-			Item.Utoc.OldSize = IFileManager::Get().FileSize(*OldUtoc);
-			Item.Utoc.NewMD5  = FPPakPatcherUtils::CalculateFileMD5String(NewUtoc);
-			Item.Utoc.NewCRC  = FPPakPatcherUtils::CalculateFileCrc32(NewUtoc);
-			Item.Utoc.NewSize = IFileManager::Get().FileSize(*NewUtoc);
+			FillEntryBothHashes(Item.Utoc, NewUtoc, OldUtoc);
+			Item.Utoc.FileName = FPaths::GetCleanFilename(NewUtoc); // 防御：FillEntryBothHashes 已经按 NewUtoc 命名
 			Item.Utoc.DiffType = (Item.Utoc.OldMD5 == Item.Utoc.NewMD5)
 				? EPFileCompareDiffType::Equal : EPFileCompareDiffType::Modify;
 		}
@@ -361,12 +390,8 @@ bool FPPatchManager::CreatePatch(const FString& InOldDir, const FString& InNewDi
 		if (bNewUcasExists && bOldUcasExists)
 		{
 			Item.Ucas.FileName = FPaths::GetCleanFilename(NewUcas);
-			Item.Ucas.OldMD5  = FPPakPatcherUtils::CalculateFileMD5String(OldUcas);
-			Item.Ucas.OldCRC  = FPPakPatcherUtils::CalculateFileCrc32(OldUcas);
-			Item.Ucas.OldSize = IFileManager::Get().FileSize(*OldUcas);
-			Item.Ucas.NewMD5  = FPPakPatcherUtils::CalculateFileMD5String(NewUcas);
-			Item.Ucas.NewCRC  = FPPakPatcherUtils::CalculateFileCrc32(NewUcas);
-			Item.Ucas.NewSize = IFileManager::Get().FileSize(*NewUcas);
+			FillEntryBothHashes(Item.Ucas, NewUcas, OldUcas);
+			Item.Ucas.FileName = FPaths::GetCleanFilename(NewUcas);
 			Item.Ucas.DiffType = (Item.Ucas.OldMD5 == Item.Ucas.NewMD5)
 				? EPFileCompareDiffType::Equal : EPFileCompareDiffType::Modify;
 		}
@@ -391,23 +416,97 @@ bool FPPatchManager::CreatePatch(const FString& InOldDir, const FString& InNewDi
 		}
 
 		// ═══ Modify（至少有一个子文件变了）═══
-		// 生成 .patch 文件（FPResPatcher::CreateDiff 内部联动 IoStore）
+		// 生成 .patch 文件（FPResPatcher::CreateDiff 内部按 Mode 分发，IoStore 联动由各分支内部处理）
 		const FString PatchBaseName = BaseName + TEXT(".patch");
 		const FString PatchFullPath = InPatchDir / PatchBaseName;
 
-		FPResPatchDataPtr OutPatch;
-		const bool bOk = ResPatcher.CreateDiff(PatchFullPath, NewPak, OldPak, OutPatch,
-			EPPakPatchMode::PakAware, EPakPatchCompressType::None);
-		if (!bOk)
+		// 暂存 Modify task，等所有 chunk 收集完后并发执行
+		Item.PatchFileName = PatchBaseName;
+		FModifyTask Task;
+		Task.Item          = Item;
+		Task.PatchFullPath = PatchFullPath;
+		Task.PatchBaseName = PatchBaseName;
+		Task.NewPak        = NewPak;
+		Task.OldPak        = OldPak;
+		ModifyTasks.Add(MoveTemp(Task));
+	}
+
+	// step 6.5 : 并发执行所有 Modify chunk 的 CreateDiff
+	FPPakPatcherPerfReport CreateSummary;
+	if (ModifyTasks.Num() > 0)
+	{
+		const int32 ThreadNum = UPPakPatcherSettings::Get().PatchTaskThreadNum;
+		FPPakPatcherTaskRunner Runner(ThreadNum, TEXT("CreatePatch"));
+		const EPPakPatchMode PatchMode = UPPakPatcherSettings::Get().PakPatchMode;
+
+		UE_LOG(LogPPakPacher, Display,
+			TEXT("FPPatchManager::CreatePatch - Dispatching %d Modify tasks. PatchMode=%s CompressType=%s"),
+			ModifyTasks.Num(),
+			*UEnum::GetValueAsString(PatchMode),
+			*UEnum::GetValueAsString(InCompressType));
+
+		// 结果数组：每个 task 写自己的 slot，避免数据竞争
+		const int32 NumTasks = ModifyTasks.Num();
+		TArray<bool> TaskResults;
+		TaskResults.SetNumZeroed(NumTasks);
+
+		// 进度追踪
+		ProgressCurrent.store(0, std::memory_order_relaxed);
+		ProgressTotal.store(NumTasks, std::memory_order_relaxed);
+		std::atomic<int32>* ProgressPtr = &ProgressCurrent;
+
+		// 共享 PerfReport（所有 task 通过 ThreadSafeMergeFrom 汇总）
+
+		for (int32 i = 0; i < NumTasks; ++i)
 		{
-			UE_LOG(LogPPakPacher, Error, TEXT("CreatePatch - CreateDiff failed: %s"), *PatchFullPath);
-			++NumFailed;
-			continue;
+			const FModifyTask& T = ModifyTasks[i];
+			Runner.Submit([T, PatchMode, InCompressType, &TaskResults, i, NumTasks, ProgressPtr, &CreateSummary](int32 TaskIdx) -> bool
+			{
+				const double TaskStart = FPlatformTime::Seconds();
+				UE_LOG(LogPPakPacher, Display,
+					TEXT("CreatePatch[Task %d/%d] - Start. Chunk=%s NewPak=%s"),
+					i + 1, NumTasks, *T.Item.ChunkName, *T.NewPak);
+
+				FPPakPatcherPerfReport LocalPerf;
+				FPResPatcher LocalPatcher;
+				FPResPatchDataPtr OutPatch;
+				const bool bOk = LocalPatcher.CreateDiff(T.PatchFullPath, T.NewPak, T.OldPak,
+					OutPatch, PatchMode, InCompressType, &LocalPerf);
+				const double Elapsed = FPlatformTime::Seconds() - TaskStart;
+				if (!bOk)
+				{
+					UE_LOG(LogPPakPacher, Error,
+						TEXT("CreatePatch[Task %d/%d] - FAILED. Chunk=%s Patch=%s NewPak=%s OldPak=%s Elapsed=%.2fs"),
+						i + 1, NumTasks, *T.Item.ChunkName, *T.PatchFullPath, *T.NewPak, *T.OldPak, Elapsed);
+				}
+				else
+				{
+					UE_LOG(LogPPakPacher, Display,
+						TEXT("CreatePatch[Task %d/%d] - Done. Chunk=%s Elapsed=%.2fs"),
+						i + 1, NumTasks, *T.Item.ChunkName, Elapsed);
+				}
+				TaskResults[i] = bOk;
+				CreateSummary.ThreadSafeMergeFrom(LocalPerf);
+				ProgressPtr->fetch_add(1, std::memory_order_relaxed);
+				return bOk;
+			});
 		}
 
-		Item.PatchFileName = PatchBaseName;
-		PatchManifest.AddItem(Item);
-		++NumModify;
+		Runner.Wait();
+
+		// 串行汇总结果到 PatchManifest / 计数器
+		for (int32 i = 0; i < NumTasks; ++i)
+		{
+			if (TaskResults[i])
+			{
+				PatchManifest.AddItem(ModifyTasks[i].Item);
+				++NumModify;
+			}
+			else
+			{
+				++NumFailed;
+			}
+		}
 	}
 
 	// step 7 : Old 中存在但 New 中没有的 chunk → Delete
@@ -452,6 +551,15 @@ bool FPPatchManager::CreatePatch(const FString& InOldDir, const FString& InNewDi
 		TEXT("FPPatchManager::CreatePatch - Done. Modify=%d Add=%d Equal=%d Delete=%d Failed=%d"),
 		NumModify, NumAdd, NumEqual, NumDelete, NumFailed);
 
+	// 保存 PerfReport 汇总（所有 chunk 的 PerfReport 已通过 ThreadSafeMergeFrom 累加到 CreateSummary）
+	if (ModifyTasks.Num() > 0)
+	{
+		const FString SummaryPath = InPatchDir / TEXT("perf_summary.json");
+		CreateSummary.SaveToFile(SummaryPath);
+		UE_LOG(LogPPakPacher, Display,
+			TEXT("CreatePatch - PerfSummary saved (%d chunks): %s"), ModifyTasks.Num(), *SummaryPath);
+	}
+
 	return NumFailed == 0;
 }
 
@@ -461,8 +569,10 @@ bool FPPatchManager::CreatePatch(const FString& InOldDir, const FString& InNewDi
 
 bool FPPatchManager::ApplyPatch(const FString& InResDir, const FString& InPatchDir)
 {
-	UE_LOG(LogPPakPacher, Display, TEXT("FPPatchManager::ApplyPatch - Begin. Res:%s Patch:%s"),
-		*InResDir, *InPatchDir);
+	UE_LOG(LogPPakPacher, Display,
+		TEXT("FPPatchManager::ApplyPatch - Begin. Res:%s Patch:%s PatchTaskThreadNum=%d"),
+		*InResDir, *InPatchDir,
+		UPPakPatcherSettings::Get().PatchTaskThreadNum);
 
 	FPPatchManifestFile PatchManifest;
 	if (!PatchManifest.Load(InPatchDir / GetPatchManifestFileName())) return false;
@@ -506,6 +616,16 @@ bool FPPatchManager::ApplyPatch(const FString& InResDir, const FString& InPatchD
 	FPResPatcher ResPatcher;
 	int32 NumModify = 0, NumAdd = 0, NumEqual = 0, NumDelete = 0, NumFailed = 0;
 
+	// Modify 任务队列：PatchDiff 是热点，按 PatchTaskThreadNum 并发执行
+	struct FApplyTask
+	{
+		FPPatchManifestFileItem Item;
+		FString OldFullPath;
+		FString NewFullPath;
+		FString PatchFullPath;
+	};
+	TArray<FApplyTask> ApplyTasks;
+
 	for (const TPair<FString, FPPatchManifestFileItem>& KV : PatchManifest.GetManifestFileItems())
 	{
 		const FPPatchManifestFileItem& Item = KV.Value;
@@ -544,104 +664,275 @@ bool FPPatchManager::ApplyPatch(const FString& InResDir, const FString& InPatchD
 
 		const FString PakFileName = Item.Pak.FileName;
 		const FString OldFullPath = InResDir / PakFileName;
-		const bool bSameName = true;  // 在当前设计下 pak 文件名不变
 
 		// New 产物写到 .new 后缀
 		const FString NewFullPath = OldFullPath + TEXT(".new");
 		const FString PatchFullPath = InPatchDir / Item.PatchFileName;
 
-		FPResPatchDataPtr Patch = MakeShared<FPResPatchData, ESPMode::ThreadSafe>();
-		if (!Patch->LoadFromFile(PatchFullPath))
+		FApplyTask T;
+		T.Item          = Item;
+		T.OldFullPath   = OldFullPath;
+		T.NewFullPath   = NewFullPath;
+		T.PatchFullPath = PatchFullPath;
+		ApplyTasks.Add(MoveTemp(T));
+	}
+
+	// ── 修复 #6：两阶段原子替换 .pak + .utoc + .ucas（chunk 内必须全成功或全回滚）──
+	//
+	// 旧策略：顺序调 ReplaceFile(Pak) → ReplaceFile(Utoc) → ReplaceFile(Ucas)，pak 成功
+	// 但 utoc 失败会产生致命半状态（新 pak + 旧 utoc/ucas）。
+	// 旧的 ReplaceFile 单文件 lambda 已被 ReplaceFilesAtomic 取代并删除（清理死代码）。
+	//
+	// 新策略：两阶段提交 + best-effort 回滚
+	//   阶段 0（preflight）：检查所有 .new 文件都存在
+	//   阶段 1：对每个 Modify 目标：rename OldFile → OldFile.bak；rename NewFile → OldFile
+	//   阶段 2：全成功 → 删除所有 .bak；任何失败 → 回滚已成功的（rename .bak → OldFile，
+	//          清理 .new 文件）
+	//
+	// 仅处理 chunk 内的 Modify 子集；Equal/Add/Delete 不在此函数处理（由外层 DoAdd/DoDelete
+	// 单文件处理；ApplyPatch task 只面对 Modify chunks）。
+	auto ReplaceFilesAtomic = [](const FString& InResDirInner, const TArray<FPPatchManifestFileEntry>& Entries) -> bool
+	{
+		// 收集所有 Modify entry 的目标文件路径
+		struct FOp { FString OldFile; FString NewFile; FString BakFile; bool bMovedToBak = false; bool bMovedFromNew = false; };
+		TArray<FOp> Ops;
+		Ops.Reserve(Entries.Num());
+
+		for (const FPPatchManifestFileEntry& Entry : Entries)
 		{
-			UE_LOG(LogPPakPacher, Error, TEXT("ApplyPatch - Patch load failed: %s"), *PatchFullPath);
-			++NumFailed;
-			continue;
+			if (Entry.DiffType != EPFileCompareDiffType::Modify)
+			{
+				continue;
+			}
+			FOp Op;
+			Op.OldFile = InResDirInner / Entry.FileName;
+			Op.NewFile = Op.OldFile + TEXT(".new");
+			Op.BakFile = Op.OldFile + TEXT(".bak");
+			Ops.Add(MoveTemp(Op));
 		}
 
-		if (!ResPatcher.PatchDiff(NewFullPath, OldFullPath, Patch))
+		if (Ops.Num() == 0)
 		{
-			UE_LOG(LogPPakPacher, Error, TEXT("ApplyPatch - PatchDiff failed: %s"), *Item.ChunkName);
-			++NumFailed;
-			// Cleanup .new
-			IFileManager::Get().Delete(*NewFullPath, false);
-			if (Item.Utoc.IsValid())
-			{
-				IFileManager::Get().Delete(*(InResDir / Item.Utoc.FileName + TEXT(".new")), false);
-			}
-			if (Item.Ucas.IsValid())
-			{
-				IFileManager::Get().Delete(*(InResDir / Item.Ucas.FileName + TEXT(".new")), false);
-			}
-			continue;
+			return true; // 没有 Modify entry 也算成功
 		}
 
-		// 释放文件句柄
-		Patch.Reset();
-		ResPatcher = FPResPatcher();
-
-		// ── 逐文件：Delete Old + Rename .new → 原名 ──
-		auto ReplaceFile = [&](const FPPatchManifestFileEntry& Entry) -> bool
+		// 阶段 0：preflight — 所有 .new 必须存在
+		for (const FOp& Op : Ops)
 		{
-			if (Entry.DiffType == EPFileCompareDiffType::Modify)
+			if (!IFileManager::Get().FileExists(*Op.NewFile))
 			{
-				const FString OldFile = InResDir / Entry.FileName;
-				const FString NewFile = OldFile + TEXT(".new");
-				if (!IFileManager::Get().FileExists(*NewFile))
-				{
-					UE_LOG(LogPPakPacher, Error, TEXT("ApplyPatch - .new not found: %s"), *NewFile);
-					return false;
-				}
-				IFileManager::Get().Delete(*OldFile, false);
-				UE_LOG(LogPPakPacher, Display, TEXT("ApplyPatch - Delete Old: %s"), *OldFile);
-				if (!IFileManager::Get().Move(*OldFile, *NewFile, true))
-				{
-					UE_LOG(LogPPakPacher, Error, TEXT("ApplyPatch - Rename failed: %s -> %s"), *NewFile, *OldFile);
-					return false;
-				}
-				UE_LOG(LogPPakPacher, Display, TEXT("ApplyPatch - Rename: %s -> %s"), *NewFile, *OldFile);
+				UE_LOG(LogPPakPacher, Error,
+					TEXT("ApplyPatch::ReplaceFilesAtomic - preflight failed: .new not found: %s"), *Op.NewFile);
+				return false;
 			}
-			else if (Entry.DiffType == EPFileCompareDiffType::Equal)
+			// 清理可能残留的 .bak（上一次失败遗留）
+			if (IFileManager::Get().FileExists(*Op.BakFile))
 			{
-				// PatchDiff 可能仍写出了 .new 文件（PatchPak 整体产出），清理残留
-				const FString NewFile = InResDir / Entry.FileName + TEXT(".new");
-				if (IFileManager::Get().FileExists(*NewFile))
-				{
-					IFileManager::Get().Delete(*NewFile, false);
-					UE_LOG(LogPPakPacher, Display, TEXT("ApplyPatch - Cleanup Equal .new: %s"), *NewFile);
-				}
+				IFileManager::Get().Delete(*Op.BakFile, false, true /*bEvenReadOnly*/, true /*bQuiet*/);
 			}
-			else if (Entry.DiffType == EPFileCompareDiffType::Add)
+		}
+
+		// 阶段 1：rename OldFile → .bak，然后 .new → OldFile
+		bool bAllOk = true;
+		for (FOp& Op : Ops)
+		{
+			// 1a. OldFile 存在则 rename 到 .bak（保留原始）
+			if (IFileManager::Get().FileExists(*Op.OldFile))
 			{
-				// IoStore 同伴可能是新增的（Old 没有同伴但 New 有）
-				// PatchDiff 内部应该已经产出了 .new 文件
-				const FString NewFile = InResDir / Entry.FileName + TEXT(".new");
-				const FString FinalFile = InResDir / Entry.FileName;
-				if (IFileManager::Get().FileExists(*NewFile))
+				if (!IFileManager::Get().Move(*Op.BakFile, *Op.OldFile, true))
 				{
-					IFileManager::Get().Move(*FinalFile, *NewFile, true);
-					UE_LOG(LogPPakPacher, Display, TEXT("ApplyPatch - Add (from .new): %s"), *FinalFile);
+					UE_LOG(LogPPakPacher, Error,
+						TEXT("ApplyPatch::ReplaceFilesAtomic - failed to backup OldFile: %s -> %s"),
+						*Op.OldFile, *Op.BakFile);
+					bAllOk = false;
+					break;
 				}
+				Op.bMovedToBak = true;
 			}
-			else if (Entry.DiffType == EPFileCompareDiffType::Delete)
+			// 1b. NewFile (.new) → OldFile
+			if (!IFileManager::Get().Move(*Op.OldFile, *Op.NewFile, true))
 			{
-				const FString Target = InResDir / Entry.FileName;
-				IFileManager::Get().Delete(*Target, false);
-				UE_LOG(LogPPakPacher, Display, TEXT("ApplyPatch - Delete companion: %s"), *Target);
+				UE_LOG(LogPPakPacher, Error,
+					TEXT("ApplyPatch::ReplaceFilesAtomic - failed to apply NewFile: %s -> %s"),
+					*Op.NewFile, *Op.OldFile);
+				bAllOk = false;
+				break;
+			}
+			Op.bMovedFromNew = true;
+		}
+
+		// 阶段 2：全成功 → 清理 .bak；任何失败 → 回滚
+		if (bAllOk)
+		{
+			for (const FOp& Op : Ops)
+			{
+				if (Op.bMovedToBak)
+				{
+					IFileManager::Get().Delete(*Op.BakFile, false, true /*bEvenReadOnly*/, true /*bQuiet*/);
+				}
+				UE_LOG(LogPPakPacher, Display,
+					TEXT("ApplyPatch::ReplaceFilesAtomic - Rename: %s -> %s"), *Op.NewFile, *Op.OldFile);
 			}
 			return true;
-		};
+		}
 
-		bool bAllOk = ReplaceFile(Item.Pak);
-		if (Item.Utoc.IsValid()) bAllOk &= ReplaceFile(Item.Utoc);
-		if (Item.Ucas.IsValid()) bAllOk &= ReplaceFile(Item.Ucas);
+		// 回滚已成功的 ops（逆序）
+		UE_LOG(LogPPakPacher, Warning,
+			TEXT("ApplyPatch::ReplaceFilesAtomic - rolling back %d ops..."), Ops.Num());
+		for (int32 i = Ops.Num() - 1; i >= 0; --i)
+		{
+			const FOp& Op = Ops[i];
+			if (Op.bMovedFromNew)
+			{
+				// 把已应用的 OldFile（实际是新版本）改回 .new 留作下次重试
+				if (!IFileManager::Get().Move(*Op.NewFile, *Op.OldFile, true))
+				{
+					UE_LOG(LogPPakPacher, Error,
+						TEXT("ApplyPatch::ReplaceFilesAtomic - rollback step1 failed: %s -> %s"), *Op.OldFile, *Op.NewFile);
+				}
+			}
+			if (Op.bMovedToBak)
+			{
+				// 把 .bak 改回 OldFile（恢复原始）
+				if (!IFileManager::Get().Move(*Op.OldFile, *Op.BakFile, true))
+				{
+					UE_LOG(LogPPakPacher, Error,
+						TEXT("ApplyPatch::ReplaceFilesAtomic - rollback step2 failed: %s -> %s"), *Op.BakFile, *Op.OldFile);
+				}
+			}
+		}
+		return false;
+	};
 
-		if (!bAllOk) { ++NumFailed; continue; }
-		++NumModify;
+	// 并发执行所有 Modify chunk 的 PatchDiff + 替换文件
+	FPPakPatcherPerfReport PatchSummary;
+	if (ApplyTasks.Num() > 0)
+	{
+		const int32 ThreadNum = UPPakPatcherSettings::Get().PatchTaskThreadNum;
+		FPPakPatcherTaskRunner Runner(ThreadNum, TEXT("ApplyPatch"));
+
+		UE_LOG(LogPPakPacher, Display,
+			TEXT("FPPatchManager::ApplyPatch - Dispatching %d Modify tasks."), ApplyTasks.Num());
+
+		const int32 NumTasks = ApplyTasks.Num();
+		TArray<bool> TaskResults;
+		TaskResults.SetNumZeroed(NumTasks);
+
+		// 进度追踪
+		ProgressCurrent.store(0, std::memory_order_relaxed);
+		ProgressTotal.store(NumTasks, std::memory_order_relaxed);
+		std::atomic<int32>* ProgressPtr = &ProgressCurrent;
+
+		for (int32 i = 0; i < NumTasks; ++i)
+		{
+			const FApplyTask& T = ApplyTasks[i];
+			// 风格说明：当前 ApplyPatch 在 Runner.Wait() 之前不返回，引用捕获 InResDir/ReplaceFilesAtomic/TaskResults
+			// 是安全的；但为了防御 fire-and-forget 模式重构，这里改为按值捕获（FString/lambda 拷贝成本可忽略），
+			// 仅 PatchSummary 与 ProgressPtr 仍按引用 / 指针捕获——它们必须跨 task 累加。
+			Runner.Submit([T, ReplaceFilesAtomic, &TaskResults, i, NumTasks, InResDir, ProgressPtr, &PatchSummary](int32 TaskIdx) -> bool
+			{
+				const double TaskStart = FPlatformTime::Seconds();
+				UE_LOG(LogPPakPacher, Display,
+					TEXT("ApplyPatch[Task %d/%d] - Start. Chunk=%s OldPak=%s NewPak=%s Patch=%s"),
+					i + 1, NumTasks, *T.Item.ChunkName, *T.OldFullPath, *T.NewFullPath, *T.PatchFullPath);
+
+				FPPakPatcherPerfReport LocalPerf;
+				FPResPatcher LocalPatcher;
+				FPResPatchDataPtr Patch = MakeShared<FPResPatchData, ESPMode::ThreadSafe>();
+				if (!Patch->LoadFromFile(T.PatchFullPath))
+				{
+					UE_LOG(LogPPakPacher, Error,
+						TEXT("ApplyPatch[Task %d/%d] - Patch load failed: %s"), i + 1, NumTasks, *T.PatchFullPath);
+					TaskResults[i] = false;
+					return false;
+				}
+
+				if (!LocalPatcher.PatchDiff(T.NewFullPath, T.OldFullPath, Patch, &LocalPerf))
+				{
+					UE_LOG(LogPPakPacher, Error,
+						TEXT("ApplyPatch[Task %d/%d] - PatchDiff failed. Chunk=%s OldPak=%s NewPak=%s Patch=%s"),
+						i + 1, NumTasks, *T.Item.ChunkName, *T.OldFullPath, *T.NewFullPath, *T.PatchFullPath);
+					// 释放 LocalPatcher 持有的 old pak 句柄，避免后续 cleanup 失败
+					LocalPatcher = FPResPatcher();
+					Patch.Reset();
+
+					// Cleanup .new
+					IFileManager::Get().Delete(*T.NewFullPath, false);
+					if (T.Item.Utoc.IsValid())
+					{
+						IFileManager::Get().Delete(*(InResDir / T.Item.Utoc.FileName + TEXT(".new")), false);
+					}
+					if (T.Item.Ucas.IsValid())
+					{
+						IFileManager::Get().Delete(*(InResDir / T.Item.Ucas.FileName + TEXT(".new")), false);
+					}
+					TaskResults[i] = false;
+					return false;
+				}
+
+				// 释放文件句柄（rename 老 pak 之前必须先放掉 reader）
+				Patch.Reset();
+				LocalPatcher = FPResPatcher();
+
+				// 文件替换（每个 chunk 操作的是不同文件，并发安全）。
+				// 两阶段提交防半状态：pak/utoc/ucas 必须全成功或全回滚，
+				// 阶段 1: rename OldFile → .bak；阶段 2: rename NewFile(.new) → OldFile；任一失败回滚 .bak。
+				TArray<FPPatchManifestFileEntry> TargetEntries;
+				TargetEntries.Reserve(3);
+				TargetEntries.Add(T.Item.Pak);
+				if (T.Item.Utoc.IsValid()) TargetEntries.Add(T.Item.Utoc);
+				if (T.Item.Ucas.IsValid()) TargetEntries.Add(T.Item.Ucas);
+
+				bool bAllOk = ReplaceFilesAtomic(InResDir, TargetEntries);
+
+				const double Elapsed = FPlatformTime::Seconds() - TaskStart;
+				if (!bAllOk)
+				{
+					UE_LOG(LogPPakPacher, Error,
+						TEXT("ApplyPatch[Task %d/%d] - ReplaceFilesAtomic failed (rolled back). Chunk=%s Elapsed=%.2fs"),
+						i + 1, NumTasks, *T.Item.ChunkName, Elapsed);
+				}
+				else
+				{
+					UE_LOG(LogPPakPacher, Display,
+						TEXT("ApplyPatch[Task %d/%d] - Done. Chunk=%s Elapsed=%.2fs"),
+						i + 1, NumTasks, *T.Item.ChunkName, Elapsed);
+				}
+				TaskResults[i] = bAllOk;
+				PatchSummary.ThreadSafeMergeFrom(LocalPerf);
+				ProgressPtr->fetch_add(1, std::memory_order_relaxed);
+				return bAllOk;
+			});
+		}
+
+		Runner.Wait();
+
+		for (bool bOk : TaskResults)
+		{
+			if (bOk) ++NumModify;
+			else     ++NumFailed;
+		}
 	}
 
 	UE_LOG(LogPPakPacher, Display,
 		TEXT("FPPatchManager::ApplyPatch - Done. Modify=%d Add=%d Equal=%d Delete=%d Failed=%d"),
 		NumModify, NumAdd, NumEqual, NumDelete, NumFailed);
+
+	// 保存 PerfReport 汇总（修复 #39）
+	//
+	// 文件名与 CreatePatch 端保持一致（perf_summary.json），通过目录区分两端：
+	//   - CreatePatch: <PatchDir>/perf_summary.json   （patch 产出阶段）
+	//   - ApplyPatch:  <PatchedRes>/perf_summary.json （patch 应用阶段）
+	//
+	// 旧路径 <PatchDir>/perf_patch_summary.json 已废弃，不再写入。
+	// 这样语义清晰：PatchDir 装"构建产物 + 构建 perf"；PatchedRes 装"应用结果 + 应用 perf"。
+	if (ApplyTasks.Num() > 0)
+	{
+		const FString SummaryPath = InResDir / TEXT("perf_summary.json");
+		PatchSummary.SaveToFile(SummaryPath);
+		UE_LOG(LogPPakPacher, Display,
+			TEXT("ApplyPatch - PerfSummary saved (%d chunks): %s"), ApplyTasks.Num(), *SummaryPath);
+	}
 
 	return NumFailed == 0;
 }
