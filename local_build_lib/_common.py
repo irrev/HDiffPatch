@@ -31,6 +31,11 @@ BUILD_LIBS_DIR = REPO_ROOT / "build_libs"              # CMake 工程根
 PARENT_DIR = REPO_ROOT.parent                          # 第三方依赖兄弟目录
 OUTPUT_ROOT = SCRIPT_DIR / "out"                       # 本地脚本统一输出目录
 BUILD_ROOT = SCRIPT_DIR / "build"                      # CMake 构建目录
+# UE 插件第三方库目录；BuildTask 设置 plugin_*_dir 后产物会同步安装到这里
+PLUGIN_THIRDPARTY = (
+    REPO_ROOT / "UEPlugins" / "PPakPatcher" / "Source" / "PPakPatcher"
+    / "ThirdParty" / "HDiffPatch"
+)
 
 
 # ---------- 第三方依赖（与 CI 一致）----------
@@ -171,6 +176,8 @@ class BuildTask:
     extra_cmake_args: list[str] = field(default_factory=list)
     env_overrides: dict[str, str] = field(default_factory=dict)
     config: str = "Release"           # 多配置生成器使用
+    plugin_lib_dir: str | None = None     # 非空则把静态库装到插件 ThirdParty/HDiffPatch/lib/<此>
+    plugin_shared_dir: str | None = None  # 非空则把动态库装到插件 ThirdParty/HDiffPatch/shared/<此>
 
 
 @dataclass
@@ -254,6 +261,22 @@ class LocalBuilder:
                 copied_any |= _copy_artifacts(d, out_shr_dir)
         if not copied_any:
             warn(f"No artifacts found for preset '{task.preset}' under {build_dir}.")
+
+        # 同步安装到 UE 插件 ThirdParty 目录，便于直接在引擎里使用
+        if task.plugin_lib_dir:
+            dst = PLUGIN_THIRDPARTY / "lib" / task.plugin_lib_dir
+            dst.mkdir(parents=True, exist_ok=True)
+            for d in candidates_static:
+                if d.is_dir():
+                    _copy_artifacts(d, dst)
+            info(f"  installed static -> {dst}")
+        if task.plugin_shared_dir:
+            dst = PLUGIN_THIRDPARTY / "shared" / task.plugin_shared_dir
+            dst.mkdir(parents=True, exist_ok=True)
+            for d in candidates_shared:
+                if d.is_dir():
+                    _copy_artifacts(d, dst)
+            info(f"  installed shared -> {dst}")
 
     def run_all(self) -> None:
         self.prepare()

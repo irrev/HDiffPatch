@@ -24,4 +24,16 @@ builds/vc/ipch/
 .vs/
 *.user
 x64/
-UEPlugins/PPakPatcher/Source/PPakPatcher/ThirdParty
+# ThirdParty 默认整体忽略，仅放行 OpenHarmony 预编译库（其余平台库由 CI 产出）
+# 用「目录/*」逐级放行，最后用「openharmony/**」覆盖上面的全局 *.a 忽略
+UEPlugins/PPakPatcher/Source/PPakPatcher/ThirdParty/*
+!UEPlugins/PPakPatcher/Source/PPakPatcher/ThirdParty/HDiffPatch/
+UEPlugins/PPakPatcher/Source/PPakPatcher/ThirdParty/HDiffPatch/*
+!UEPlugins/PPakPatcher/Source/PPakPatcher/ThirdParty/HDiffPatch/lib/
+UEPlugins/PPakPatcher/Source/PPakPatcher/ThirdParty/HDiffPatch/lib/*
+!UEPlugins/PPakPatcher/Source/PPakPatcher/ThirdParty/HDiffPatch/lib/openharmony/
+!UEPlugins/PPakPatcher/Source/PPakPatcher/ThirdParty/HDiffPatch/lib/openharmony/**
+!UEPlugins/PPakPatcher/Source/PPakPatcher/ThirdParty/HDiffPatch/shared/
+UEPlugins/PPakPatcher/Source/PPakPatcher/ThirdParty/HDiffPatch/shared/*
+!UEPlugins/PPakPatcher/Source/PPakPatcher/ThirdParty/HDiffPatch/shared/openharmony/
+!UEPlugins/PPakPatcher/Source/PPakPatcher/ThirdParty/HDiffPatch/shared/openharmony/**

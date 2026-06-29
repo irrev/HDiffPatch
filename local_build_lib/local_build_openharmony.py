@@ -147,6 +147,8 @@ def main() -> None:
             arch_label=a,
             env_overrides=env_overrides,
             extra_cmake_args=extra_args,
+            plugin_lib_dir=f"openharmony/{a}",
+            plugin_shared_dir=f"openharmony/{a}",
         )
         for a in archs
     ]
