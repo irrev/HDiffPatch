@@ -258,8 +258,8 @@ elseif(OHOS OR CMAKE_SYSTEM_NAME STREQUAL "OHOS")
 elseif(UNIX AND NOT APPLE)
     target_compile_definitions(HDiffPatchStatic PRIVATE HDIFFPATCH_PLATFORM_LINUX)
     target_compile_definitions(HDiffPatchShared PRIVATE HDIFFPATCH_PLATFORM_LINUX)
-    target_link_libraries(HDiffPatchStatic stdc++)
-    target_link_libraries(HDiffPatchShared stdc++)
+    # 不显式链接 stdc++: C++ 标准库由 -stdlib (见 ue-linux-libcxx.toolchain.cmake) 决定。
+    # 供 UE 使用时必须是 libc++，强链 stdc++ 会把 libstdc++ ABI 焊进库导致 UE 链接失败。
 elseif(APPLE)
     target_compile_definitions(HDiffPatchStatic PRIVATE HDIFFPATCH_PLATFORM_MACOS)
     target_compile_definitions(HDiffPatchShared PRIVATE HDIFFPATCH_PLATFORM_MACOS)

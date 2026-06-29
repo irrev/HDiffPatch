@@ -86,7 +86,9 @@ public class PPakPatcher : ModuleRules
 		// add HDiffPatch third party
 		if(bEnableHDiffPatch)
 		{
-			bool bUseStaticLib = Target.Platform == UnrealTargetPlatform.Win64;
+			bool bUseStaticLib = Target.Platform == UnrealTargetPlatform.Win64
+				|| Target.Platform == UnrealTargetPlatform.Linux
+				|| IsTargetPlatform(Target.Platform, "LinuxArm64");
 
 			PublicDefinitions.Add(String.Format("HDIFFPATCH_STATIC_LIB={0}", bUseStaticLib ? "1" : "0"));
 
@@ -132,18 +134,27 @@ public class PPakPatcher : ModuleRules
 			}
 			else if (Target.Platform == UnrealTargetPlatform.Linux)
 			{
+				// 必须只加目标架构对应的库，混入其它架构会导致 lld 架构错配链接失败。
 				PublicDefinitions.Add("HDIFFPATCH_PLATFORM_LINUX=1");
 				if(bUseStaticLib)
 				{
-					PublicAdditionalLibraries.Add(Path.Combine(StaticPath, "linux", "arm", "libHDiffPatch.a"));
 					PublicAdditionalLibraries.Add(Path.Combine(StaticPath, "linux", "x64", "libHDiffPatch.a"));
-					PublicAdditionalLibraries.Add(Path.Combine(StaticPath, "linux", "x86", "libHDiffPatch.a"));
 				}
 				else
 				{
-					PublicAdditionalLibraries.Add(Path.Combine(SharedPath, "linux", "arm", "libHDiffPatch.so"));
 					PublicAdditionalLibraries.Add(Path.Combine(SharedPath, "linux", "x64", "libHDiffPatch.so"));
-					PublicAdditionalLibraries.Add(Path.Combine(SharedPath, "linux", "x86", "libHDiffPatch.so"));
+				}
+			}
+			else if (IsTargetPlatform(Target.Platform, "LinuxArm64"))
+			{
+				PublicDefinitions.Add("HDIFFPATCH_PLATFORM_LINUX=1");
+				if(bUseStaticLib)
+				{
+					PublicAdditionalLibraries.Add(Path.Combine(StaticPath, "linux", "arm64", "libHDiffPatch.a"));
+				}
+				else
+				{
+					PublicAdditionalLibraries.Add(Path.Combine(SharedPath, "linux", "arm64", "libHDiffPatch.so"));
 				}
 			}
 			else if (Target.Platform == UnrealTargetPlatform.Mac)

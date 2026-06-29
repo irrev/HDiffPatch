@@ -33,12 +33,15 @@ jobs:
       CMAKE_VERSION: '3.29.0'
       VCPKG_ROOT: "${{ github.workspace }}/vcpkg"
       OHOS_SDK_VERSION: '6.0'
+      # UE5.5 Linux 交叉工具链 (与引擎一致的 clang 18.1.0 + libc++ + sysroot)
+      UE_LINUX_TOOLCHAIN: 'v25_clang-18.1.0-rockylinux8'
+      UE_LINUX_TOOLCHAIN_URL: 'https://cdn.unrealengine.com/Toolchain_Linux/native-linux-v25_clang-18.1.0-rockylinux8.tar.gz'
 
     strategy:
       # Set fail-fast to false to ensure that feedback is delivered for all matrix combinations. Consider changing this to true when your workflow is stable.
       fail-fast: false
       matrix:
-        build_target: [windows-x64, windows-x86, android-arm64, android-armeabi, android-x86, android-x86_64, linux-arm, linux-x86, linux-x64, macos, ios, openharmony-arm64, openharmony-x86_64]
+        build_target: [windows-x64, windows-x86, android-arm64, android-armeabi, android-x86, android-x86_64, linux-x64, linux-arm64, macos, ios, openharmony-arm64, openharmony-x86_64]
         build_type: [Release]
         include:
           - build_target: windows-x64
@@ -59,15 +62,12 @@ jobs:
           - build_target: android-x86_64
             os: ubuntu-latest
             preset: android-x86_64
-          - build_target: linux-arm
-            os: ubuntu-latest
-            preset: linux-arm
-          - build_target: linux-x86
-            os: ubuntu-latest
-            preset: linux-x86
           - build_target: linux-x64
             os: ubuntu-latest
             preset: linux-x64
+          - build_target: linux-arm64
+            os: ubuntu-latest
+            preset: linux-arm64
           - build_target: macos
             os: macos-latest
             preset: macos
@@ -184,6 +184,27 @@ jobs:
       shell: bash
       run: |
         sudo apt-get install -y ninja-build
+
+    - name: Download UE Linux cross toolchain
+      if: startsWith(matrix.preset, 'linux')
+      shell: bash
+      run: |
+        set -e
+        TC_DIR="${{ github.workspace }}/ue-linux-toolchain"
+        mkdir -p "$TC_DIR"
+        echo "Downloading $UE_LINUX_TOOLCHAIN ..."
+        curl -L --fail -o /tmp/uetc.tar.gz "$UE_LINUX_TOOLCHAIN_URL"
+        tar -xzf /tmp/uetc.tar.gz -C "$TC_DIR"
+        ROOT="$TC_DIR/$UE_LINUX_TOOLCHAIN"
+        if [ ! -d "$ROOT" ]; then
+          ROOT="$(find "$TC_DIR" -maxdepth 1 -mindepth 1 -type d | head -n1)"
+        fi
+        echo "UE_LINUX_TOOLCHAIN_ROOT=$ROOT" >> "$GITHUB_ENV"
+        echo "Toolchain root: $ROOT"
+        ls "$ROOT"
+        # sanity check: clang + libc++ 头是否就位
+        (ls "$ROOT"/bin/clang++ || ls "$ROOT"/*/bin/clang++) || echo "WARN: clang++ not found"
+        (find "$ROOT" -type d -path '*c++/v1' | head -n1) || echo "WARN: libc++ headers not found in toolchain"
 
     - name: Configure CMake (Windows)
       if: startsWith(matrix.preset, 'windows')
@@ -302,15 +323,12 @@ jobs:
           copy_lib "archive/android-x86_64/static/libHDiffPatch.a" "$BASE_PATH/lib/android/x86_64" "libHDiffPatch.a"
           copy_lib "archive/android-x86_64/shared/libHDiffPatch.so" "$BASE_PATH/shared/android/x86_64" "libHDiffPatch.so"
 
-          # Linux
-          copy_lib "archive/linux-arm/static/libHDiffPatch.a" "$BASE_PATH/lib/linux/arm" "libHDiffPatch.a"
-          copy_lib "archive/linux-arm/shared/libHDiffPatch.so" "$BASE_PATH/shared/linux/arm" "libHDiffPatch.so"
-          
-          copy_lib "archive/linux-x86/static/libHDiffPatch.a" "$BASE_PATH/lib/linux/x86" "libHDiffPatch.a"
-          copy_lib "archive/linux-x86/shared/libHDiffPatch.so" "$BASE_PATH/shared/linux/x86" "libHDiffPatch.so"
-          
-          copy_lib "archive/linux-x64/static/libHDiffPatch.a" "$BASE_PATH/lib/linux/x64" "libHDiffPatch.a"
-          copy_lib "archive/linux-x64/shared/libHDiffPatch.so" "$BASE_PATH/shared/linux/x64" "libHDiffPatch.so"
+          # Linux (UE 目标: x86_64 / arm64，均用 UE 交叉工具链 + libc++ 构建)
+          copy_lib "archive/linux-x64/static/libHDiffPatch.a"  "$BASE_PATH/lib/linux/x64"     "libHDiffPatch.a"
+          copy_lib "archive/linux-x64/shared/libHDiffPatch.so" "$BASE_PATH/shared/linux/x64"  "libHDiffPatch.so"
+
+          copy_lib "archive/linux-arm64/static/libHDiffPatch.a"  "$BASE_PATH/lib/linux/arm64"    "libHDiffPatch.a"
+          copy_lib "archive/linux-arm64/shared/libHDiffPatch.so" "$BASE_PATH/shared/linux/arm64" "libHDiffPatch.so"
 
           # macOS
           copy_lib "archive/macos/static/Release/libHDiffPatch.a" "$BASE_PATH/lib/macos" "libHDiffPatch.a"
