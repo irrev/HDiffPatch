@@ -227,6 +227,11 @@ target_compile_definitions(HDiffPatchShared PRIVATE HDIFFPATCH_STATIC_LIB=0)
 if(WIN32)
     target_compile_definitions(HDiffPatchStatic PRIVATE HDIFFPATCH_PLATFORM_WINDOWS)
     target_compile_definitions(HDiffPatchShared PRIVATE HDIFFPATCH_PLATFORM_WINDOWS)
+    # 关闭 MSVC STL 矢量化算法卫星函数(__std_rotate/__std_find...)，改用纯头实现。
+    # 否则用新版 VS 工具集编的 .lib 会引用这些符号，链进旧 MSVC STL 的 UE 时报
+    # unresolved external symbol __std_rotate。
+    target_compile_definitions(HDiffPatchStatic PRIVATE _USE_STD_VECTOR_ALGORITHMS=0)
+    target_compile_definitions(HDiffPatchShared PRIVATE _USE_STD_VECTOR_ALGORITHMS=0)
     target_link_libraries(HDiffPatchShared PRIVATE kernel32 user32 gdi32 winspool shell32 ole32 oleaut32 uuid comdlg32 advapi32)
 elseif(ANDROID)
     target_compile_definitions(HDiffPatchStatic PRIVATE HDIFFPATCH_PLATFORM_ANDROID)
