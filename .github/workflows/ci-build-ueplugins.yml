@@ -29,7 +29,7 @@ jobs:
       JDK_VERSION: 17
       SDK_PLATFORM: android-35
       SDK_BUILD_TOOLS: 35.0.1
-      XC_VERSION: ${{ '16.3' }}
+      XC_VERSION: 'latest-stable'
       CMAKE_VERSION: '3.29.0'
       VCPKG_ROOT: "${{ github.workspace }}/vcpkg"
       OHOS_SDK_VERSION: '6.0'
@@ -201,10 +201,10 @@ jobs:
         fi
         echo "UE_LINUX_TOOLCHAIN_ROOT=$ROOT" >> "$GITHUB_ENV"
         echo "Toolchain root: $ROOT"
-        ls "$ROOT"
-        # sanity check: clang + libc++ 头是否就位
-        (ls "$ROOT"/bin/clang++ || ls "$ROOT"/*/bin/clang++) || echo "WARN: clang++ not found"
-        (find "$ROOT" -type d -path '*c++/v1' | head -n1) || echo "WARN: libc++ headers not found in toolchain"
+        echo "----- top level -----"; ls -la "$ROOT"
+        echo "----- dirs (depth<=3) -----"; find "$ROOT" -maxdepth 3 -type d | sort
+        echo "----- clang++ -----"; find "$ROOT" -name 'clang++' -type f -o -name 'clang++' -type l
+        echo "----- libc++ headers -----"; find "$ROOT" -type d -path '*c++/v1' | head -n5 || echo "WARN: libc++ headers not found"
 
     - name: Configure CMake (Windows)
       if: startsWith(matrix.preset, 'windows')
@@ -323,7 +323,7 @@ jobs:
           copy_lib "archive/android-x86_64/static/libHDiffPatch.a" "$BASE_PATH/lib/android/x86_64" "libHDiffPatch.a"
           copy_lib "archive/android-x86_64/shared/libHDiffPatch.so" "$BASE_PATH/shared/android/x86_64" "libHDiffPatch.so"
 
-          # Linux (UE 目标: x86_64 / arm64，均用 UE 交叉工具链 + libc++ 构建)
+          # Linux (UE 目标: x86_64 / arm64，均用 UE clang 交叉工具链 + libc++ 构建)
           copy_lib "archive/linux-x64/static/libHDiffPatch.a"  "$BASE_PATH/lib/linux/x64"     "libHDiffPatch.a"
           copy_lib "archive/linux-x64/shared/libHDiffPatch.so" "$BASE_PATH/shared/linux/x64"  "libHDiffPatch.so"
 

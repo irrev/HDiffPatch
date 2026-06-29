@@ -24,18 +24,28 @@ if(NOT _tc)
     message(FATAL_ERROR "UE_LINUX_TOOLCHAIN_ROOT env not set")
 endif()
 
-# 兼容两种 bundle 布局: 共享 clang(<root>/bin) 或 per-arch clang(<root>/<arch>/bin)
-if(EXISTS "${_tc}/bin/clang++")
-    set(_bindir "${_tc}/bin")
-elseif(EXISTS "${_tc}/${UE_LINUX_ARCH}/bin/clang++")
-    set(_bindir "${_tc}/${UE_LINUX_ARCH}/bin")
-else()
-    message(FATAL_ERROR "clang++ not found under ${_tc}")
+# 自动定位 clang++ (优先目标 arch 子目录，clang 是 cross driver，选哪个 arch 的都行)
+file(GLOB_RECURSE _cxx_cands "${_tc}/${UE_LINUX_ARCH}/*clang++")
+if(NOT _cxx_cands)
+    file(GLOB_RECURSE _cxx_cands "${_tc}/*clang++")
 endif()
+list(FILTER _cxx_cands EXCLUDE REGEX "\\.(cfg|sh|txt)$")
+if(NOT _cxx_cands)
+    message(FATAL_ERROR "clang++ not found under ${_tc} (检查 UE_LINUX_TOOLCHAIN_URL 是否正确解压)")
+endif()
+list(GET _cxx_cands 0 _cxx)
+get_filename_component(_bindir "${_cxx}" DIRECTORY)
 
 set(CMAKE_C_COMPILER   "${_bindir}/clang")
 set(CMAKE_CXX_COMPILER "${_bindir}/clang++")
-set(CMAKE_SYSROOT      "${_tc}/${UE_LINUX_ARCH}")
+
+# sysroot 必须匹配目标 arch；native bundle 仅含 host(x86_64)，缺该 arch 时明确报错
+if(NOT EXISTS "${_tc}/${UE_LINUX_ARCH}")
+    message(FATAL_ERROR
+        "sysroot ${_tc}/${UE_LINUX_ARCH} 不存在；该 bundle 不含 ${UE_LINUX_ARCH} 架构 "
+        "(native-linux bundle 仅含 x86_64，arm64 需用 multiarch 来源)。")
+endif()
+set(CMAKE_SYSROOT "${_tc}/${UE_LINUX_ARCH}")
 set(CMAKE_C_COMPILER_TARGET   "${UE_LINUX_ARCH}")
 set(CMAKE_CXX_COMPILER_TARGET "${UE_LINUX_ARCH}")
 
