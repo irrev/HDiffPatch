@@ -87,8 +87,7 @@ public class PPakPatcher : ModuleRules
 		if(bEnableHDiffPatch)
 		{
 			bool bUseStaticLib = Target.Platform == UnrealTargetPlatform.Win64
-				|| Target.Platform == UnrealTargetPlatform.Linux
-				|| IsTargetPlatform(Target.Platform, "LinuxArm64");
+				|| Target.Platform == UnrealTargetPlatform.Linux;
 
 			PublicDefinitions.Add(String.Format("HDIFFPATCH_STATIC_LIB={0}", bUseStaticLib ? "1" : "0"));
 
@@ -143,18 +142,6 @@ public class PPakPatcher : ModuleRules
 				else
 				{
 					PublicAdditionalLibraries.Add(Path.Combine(SharedPath, "linux", "x64", "libHDiffPatch.so"));
-				}
-			}
-			else if (IsTargetPlatform(Target.Platform, "LinuxArm64"))
-			{
-				PublicDefinitions.Add("HDIFFPATCH_PLATFORM_LINUX=1");
-				if(bUseStaticLib)
-				{
-					PublicAdditionalLibraries.Add(Path.Combine(StaticPath, "linux", "arm64", "libHDiffPatch.a"));
-				}
-				else
-				{
-					PublicAdditionalLibraries.Add(Path.Combine(SharedPath, "linux", "arm64", "libHDiffPatch.so"));
 				}
 			}
 			else if (Target.Platform == UnrealTargetPlatform.Mac)

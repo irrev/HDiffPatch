@@ -151,18 +151,6 @@
             }
         },
         {
-            "name": "linux-arm64",
-            "displayName": "Linux arm64 (UE libc++)",
-            "description": "Build for Linux aarch64 with UE clang cross-toolchain + libc++",
-            "generator": "Unix Makefiles",
-            "binaryDir": "${sourceDir}/out/linux-arm64",
-            "toolchainFile": "${sourceDir}/cmake/ue-linux-libcxx.toolchain.cmake",
-            "cacheVariables": {
-                "CMAKE_BUILD_TYPE": "Release",
-                "UE_LINUX_ARCH": "aarch64-unknown-linux-gnu"
-            }
-        },
-        {
             "name": "openharmony-arm64",
             "displayName": "OpenHarmony arm64",
             "description": "Build for OpenHarmony arm64-v8a (use OHOS_NDK_HOME env to point to native/ dir)",

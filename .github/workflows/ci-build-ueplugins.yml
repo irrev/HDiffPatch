@@ -41,7 +41,7 @@ jobs:
       # Set fail-fast to false to ensure that feedback is delivered for all matrix combinations. Consider changing this to true when your workflow is stable.
       fail-fast: false
       matrix:
-        build_target: [windows-x64, windows-x86, android-arm64, android-armeabi, android-x86, android-x86_64, linux-x64, linux-arm64, macos, ios, openharmony-arm64, openharmony-x86_64]
+        build_target: [windows-x64, windows-x86, android-arm64, android-armeabi, android-x86, android-x86_64, linux-x64, macos, ios, openharmony-arm64, openharmony-x86_64]
         build_type: [Release]
         include:
           - build_target: windows-x64
@@ -65,9 +65,6 @@ jobs:
           - build_target: linux-x64
             os: ubuntu-latest
             preset: linux-x64
-          - build_target: linux-arm64
-            os: ubuntu-latest
-            preset: linux-arm64
           - build_target: macos
             os: macos-latest
             preset: macos
@@ -323,12 +320,9 @@ jobs:
           copy_lib "archive/android-x86_64/static/libHDiffPatch.a" "$BASE_PATH/lib/android/x86_64" "libHDiffPatch.a"
           copy_lib "archive/android-x86_64/shared/libHDiffPatch.so" "$BASE_PATH/shared/android/x86_64" "libHDiffPatch.so"
 
-          # Linux (UE 目标: x86_64 / arm64，均用 UE clang 交叉工具链 + libc++ 构建)
+          # Linux x86_64 (UE clang 交叉工具链 + libc++ 构建)
           copy_lib "archive/linux-x64/static/libHDiffPatch.a"  "$BASE_PATH/lib/linux/x64"     "libHDiffPatch.a"
           copy_lib "archive/linux-x64/shared/libHDiffPatch.so" "$BASE_PATH/shared/linux/x64"  "libHDiffPatch.so"
-
-          copy_lib "archive/linux-arm64/static/libHDiffPatch.a"  "$BASE_PATH/lib/linux/arm64"    "libHDiffPatch.a"
-          copy_lib "archive/linux-arm64/shared/libHDiffPatch.so" "$BASE_PATH/shared/linux/arm64" "libHDiffPatch.so"
 
           # macOS
           copy_lib "archive/macos/static/Release/libHDiffPatch.a" "$BASE_PATH/lib/macos" "libHDiffPatch.a"
